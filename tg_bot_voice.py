@@ -240,6 +240,7 @@ async def handle_voice_message(message: Message, state: FSMContext):
         response_text, new_thread_id, full_response = await process_question(
             speech_text, thread_id, assistant_id
         )
+
         logger.info(
             f"Response from GPT: {response_text}, new thread_id: {new_thread_id}, full_response: {full_response}"
         )
@@ -395,11 +396,13 @@ async def process_question(
             messages = await client.beta.threads.messages.list(
                 thread_id=thread_id
             )
+
             assistant_messages = [
-                msg.content[0].text.value
+                msg.content[0].text.value.split("```json")[0]
                 for msg in messages.data
                 if msg.role == "assistant"
             ]
+
             if assistant_messages:
                 return (
                     assistant_messages[0],
