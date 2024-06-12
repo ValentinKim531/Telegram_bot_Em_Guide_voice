@@ -4,6 +4,11 @@ import os
 import requests
 from openai import AsyncOpenAI
 from aiogram import Bot, Dispatcher, Router, F
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    CallbackQuery,
+)
 from aiogram.filters import CommandStart
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
@@ -24,6 +29,10 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ASSISTANT_ID = os.getenv("ASSISTANT_ID")
 ASSISTANT2_ID = os.getenv("ASSISTANT2_ID")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+YANDEX_OAUTH_TOKEN = os.getenv("YANDEX_OAUTH_TOKEN")
+YANDEX_FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
+YANDEX_IAM_TOKEN = None
 
 client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
@@ -187,6 +196,11 @@ async def handle_voice_message(message: Message, state: FSMContext):
     try:
         logger.info("Received voice message")
 
+        user_id = message.from_user.id
+        data = await state.get_data()
+        user_lang = data.get("language", "ru")
+        logger.info(f"User language: {user_lang}")
+
         voice_file_id = message.voice.file_id
         logger.info(f"Voice file id: {voice_file_id}")
         file_info = await bot.get_file(voice_file_id)
@@ -214,16 +228,29 @@ async def handle_voice_message(message: Message, state: FSMContext):
         audio.export("voice.mp3", format="mp3")
         logger.info("File successfully converted to voice.mp3")
 
-        # Преобразование аудио в текст с использованием Whisper API через requests
-        logger.info("Starting transcription with Whisper API")
-        speech_text = transcribe_audio("voice.mp3")
-        logger.info(f"Recognized text: {speech_text}")
-        await message.answer(
-            text=f"Вы произнесли: '{speech_text}', ожидайте ответа..."
+        # Преобразование аудио в текст с использованием Yandex STT
+        logger.info("Starting transcription with Yandex STT")
+        recognized_text_original = recognize_speech(
+            file_content, lang="kk-KK" if user_lang == "kk" else "ru-RU"
         )
+        if user_lang == "kk":
+            recognized_text = translate_text(
+                recognized_text_original, source_lang="kk", target_lang="ru"
+            )
+
+            logger.info(f"Recognized text: {recognized_text}")
+
+            await message.answer(
+                text=f"Сіз '{recognized_text_original}' дедіңіз, жауап күтіңіз..."
+            )
+
+        else:
+            await message.answer(
+                text=f"Вы произнесли: '{recognized_text_original}', ожидайте ответа..."
+            )
+            recognized_text = recognized_text_original
 
         # Получаем thread_id и тип ассистента из состояния
-        data = await state.get_data()
         thread_id = data.get("thread_id")
         assistant_type = data.get("assistant_type", "registration")
         logger.info(
@@ -238,12 +265,16 @@ async def handle_voice_message(message: Message, state: FSMContext):
             f"Sending question to GPT-3 with assistant_id: {assistant_id} and thread_id: {thread_id}"
         )
         response_text, new_thread_id, full_response = await process_question(
-            speech_text, thread_id, assistant_id
+            recognized_text, thread_id, assistant_id
         )
-
         logger.info(
             f"Response from GPT: {response_text}, new thread_id: {new_thread_id}, full_response: {full_response}"
         )
+
+        if user_lang == "kk":
+            response_text = translate_text(
+                response_text, source_lang="ru", target_lang="kk"
+            )
 
         # Сохраняем новый thread_id и тип ассистента в состоянии
         await state.update_data(
@@ -252,7 +283,9 @@ async def handle_voice_message(message: Message, state: FSMContext):
 
         # Преобразование текстового ответа в аудио с использованием TTS API
         logger.info("Generating speech audio with TTS API")
-        audio_response_bytes = await generate_speech(response_text)
+        audio_response_bytes = synthesize_speech(
+            response_text, lang_code=user_lang
+        )
         logger.info("Generated speech audio")
 
         mp3_audio_path = "response.mp3"
@@ -323,9 +356,16 @@ async def handle_voice_message(message: Message, state: FSMContext):
                         )
                         await state.update_data(thread_id=new_thread_id)
 
+                        if user_lang == "kk":
+                            response_text = translate_text(
+                                response_text,
+                                source_lang="ru",
+                                target_lang="kk",
+                            )
+
                         # Преобразование текстового ответа в аудио с использованием TTS API
-                        audio_response_bytes = await generate_speech(
-                            response_text
+                        audio_response_bytes = synthesize_speech(
+                            response_text, lang_code=user_lang
                         )
                         logger.info("Generated speech audio for headache")
 
@@ -362,11 +402,48 @@ async def handle_voice_message(message: Message, state: FSMContext):
 
 
 @router.message(CommandStart())
-async def process_start_command(message: Message, state: FSMContext):
-    logger.info("Received /start command")
+async def process_start_command(message: Message):
+    """Send a message when the command /start is issued."""
+    rus_button = InlineKeyboardButton(
+        text="Русский", callback_data="set_lang_ru"
+    )
+    kaz_button = InlineKeyboardButton(
+        text="Қазақ", callback_data="set_lang_kk"
+    )
+    markup = InlineKeyboardMarkup(inline_keyboard=[[rus_button], [kaz_button]])
 
-    # Запуск блока вопросов по регистрации
-    await process_registration(message, state)
+    await message.answer(
+        "Выберите язык / Тілді таңдаңыз:", reply_markup=markup
+    )
+
+
+user_languages = {}
+
+
+@router.callback_query(F.data.in_(["set_lang_ru", "set_lang_kk"]))
+async def set_language(callback_query: CallbackQuery, state: FSMContext):
+    """Handle language selection."""
+    user_id = callback_query.from_user.id
+    language = callback_query.data.split("_")[-1]
+    user_languages[user_id] = language
+    await state.update_data(language=language)
+
+    if language == "ru":
+        await callback_query.message.answer("Вы выбрали русский язык.")
+    elif language == "kk":
+        await callback_query.message.answer("Сіз қазақ тілін таңдадыңыз.")
+
+    await callback_query.answer()
+
+    # Call process_registration function to continue the conversation
+    await process_registration(callback_query.message, state)
+
+
+@router.message()
+async def handle_any_message(message: Message):
+    await message.answer(
+        text="Я ваш голосовой помощник Цефалголог, вам необходимо отвечать боту голосовым сообщением."
+    )
 
 
 async def process_question(
@@ -432,9 +509,13 @@ async def process_registration(message: Message, state: FSMContext):
 
     await state.update_data(thread_id=thread_id, assistant_type="registration")
 
+    # Получаем выбранный язык из состояния
+    data = await state.get_data()
+    user_lang = data.get("language", "ru")
+
     # Направляем первый вопрос по регистрации
     response_text, new_thread_id, full_response = await process_question(
-        "Здравствуйте",
+        "Здравствуйте" if user_lang == "ru" else "Здравствуйте",
         thread_id,
         ASSISTANT2_ID,
     )
@@ -444,9 +525,18 @@ async def process_registration(message: Message, state: FSMContext):
 
     await state.update_data(thread_id=new_thread_id)
 
+    # Перевод ответа на казахский язык, если выбран казахский язык
+    if user_lang == "kk":
+        logger.info(f"response_text111: {response_text}")
+        response_text = translate_text(
+            response_text, source_lang="ru", target_lang="kk"
+        )
+
     # Преобразование текстового ответа в аудио с использованием TTS API
     logger.info("Generating speech audio with TTS API")
-    audio_response_bytes = await generate_speech(response_text)
+    audio_response_bytes = synthesize_speech(
+        response_text, lang_code=user_lang
+    )
     logger.info("Generated speech audio")
 
     mp3_audio_path = "response.mp3"
@@ -509,11 +599,118 @@ async def get_new_thread_id():
     return thread.id
 
 
+def get_iam_token():
+    global YANDEX_IAM_TOKEN
+    url = "https://iam.api.cloud.yandex.net/iam/v1/tokens"
+    payload = {"yandexPassportOauthToken": YANDEX_OAUTH_TOKEN}
+    response = requests.post(url, json=payload)
+    response.raise_for_status()
+    YANDEX_IAM_TOKEN = response.json()["iamToken"]
+    logger.info(f"Received new IAM token: {YANDEX_IAM_TOKEN}")
+
+
+async def refresh_iam_token():
+    while True:
+        await asyncio.sleep(6 * 3600)
+        get_iam_token()
+        logger.info("IAM token refreshed")
+
+
+def recognize_speech(audio_content, lang="ru-RU"):
+    if not YANDEX_IAM_TOKEN:
+        get_iam_token()
+    url = f"https://stt.api.cloud.yandex.net/speech/v1/stt:recognize?folderId={YANDEX_FOLDER_ID}&lang={lang}"
+    headers = {"Authorization": f"Bearer {YANDEX_IAM_TOKEN}"}
+
+    logger.info(f"Sending {len(audio_content)} bytes to Yandex STT.")
+    response = requests.post(url, headers=headers, data=audio_content)
+    response.raise_for_status()
+
+    if response.status_code == 200:
+        result = response.json().get("result")
+        logger.info(f"Recognition result: {result}")
+        return result
+    else:
+        error_message = (
+            f"Failed to recognize speech, status code: {response.status_code}"
+        )
+        logger.error(error_message)
+        raise Exception(error_message)
+
+
+def synthesize_speech(text, lang_code):
+    voice_settings = {
+        "ru": {"lang": "ru-RU", "voice": "oksana"},
+        "kk": {"lang": "kk-KK", "voice": "amira"},
+    }
+    settings = voice_settings.get(lang_code, voice_settings["ru"])
+
+    url = "https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize"
+    headers = {"Authorization": f"Bearer {YANDEX_IAM_TOKEN}"}
+    data = {
+        "text": text,
+        "lang": settings["lang"],
+        "voice": settings["voice"],
+        "folderId": YANDEX_FOLDER_ID,
+        "format": "mp3",
+        "sampleRateHertz": 48000,
+    }
+
+    response = requests.post(url, headers=headers, data=data, stream=True)
+    logger.info(f"Status Code: {response.status_code}")
+    logger.info(f"Response Headers: {response.headers}")
+
+    if response.status_code == 200:
+        audio_content = response.content
+        logger.info(
+            f"Received audio content length: {len(audio_content)} bytes"
+        )
+        with open("response.mp3", "wb") as file:
+            file.write(audio_content)
+        logger.info("Audio content saved as 'response.mp3'.")
+        return audio_content
+    else:
+        error_message = f"Failed to synthesize speech, status code: {response.status_code}, response text: {response.text}"
+        logger.error(error_message)
+        raise Exception(error_message)
+
+
+def translate_text(text, source_lang="ru", target_lang="kk"):
+    url = "https://translate.api.cloud.yandex.net/translate/v2/translate"
+    headers = {
+        "Authorization": f"Bearer {YANDEX_IAM_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "folder_id": YANDEX_FOLDER_ID,
+        "texts": [text],
+        "targetLanguageCode": target_lang,
+        "sourceLanguageCode": source_lang,
+    }
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        translations = response.json().get("translations", [])
+        if translations:
+            return translations[0]["text"]
+        else:
+            return "Перевод не найден."
+    except requests.exceptions.HTTPError as http_err:
+        logging.error(f"HTTP error occurred: {http_err}")
+        return "Перевод не удался."
+    except Exception as err:
+        logging.error(f"An error occurred: {err}")
+        return "Перевод не удался."
+
+
 dp.include_router(router)
 
 
 async def main():
     logger.info("Starting bot")
+    get_iam_token()
+    task = asyncio.create_task(refresh_iam_token())
+    _ = task
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot, skip_updates=True)
 
