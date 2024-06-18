@@ -15,4 +15,4 @@ RUN python -m venv /app/venv && \
 COPY . .
 
 
-CMD ["/app/venv/bin/python", "s"]
+CMD ["/app/venv/bin/python", "main.py"]
