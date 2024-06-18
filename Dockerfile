@@ -15,4 +15,4 @@ RUN python -m venv /app/venv && \
 COPY . .
 
 
-CMD ["/app/venv/bin/python", "tg_bot_voice.py"]
+CMD ["/app/venv/bin/python", "main.py"]
