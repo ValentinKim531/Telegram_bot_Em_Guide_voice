@@ -85,6 +85,10 @@ async def send_statistics_file(
     try:
         # Получаем данные из базы данных
         entities = await database.get_entities(Survey)
+        user_info = await database.get_entities(
+            User
+        )  # Функция получения данных пользователя
+
         if not entities:
             await callback_query.message.answer(
                 "К сожалению, у вас пока нет записей в дневнике."
@@ -102,7 +106,7 @@ async def send_statistics_file(
             )
             return
 
-        # Подготавливаем данные для DataFrame
+        # Подготавливаем данные для DataFrame с записями
         data = [
             {
                 "Номер": record.survey_id,
@@ -120,13 +124,53 @@ async def send_statistics_file(
             for record in user_records
         ]
 
-        # Создаем DataFrame
-        df = pd.DataFrame(data)
+        # Создаем DataFrame для записей
+        df_records = pd.DataFrame(data)
 
-        # Сохраняем DataFrame в Excel файл
+        # Фильтруем записи по user_id
+        user = [entity for entity in user_info if entity.userid == user_id]
+
+        if not user:
+            await callback_query.message.answer(
+                "К сожалению, вы не зарегистрированы, пройдите регистрацию"
+            )
+            return
+
+        # Создаем DataFrame для данных пользователя
+        user_data = [
+            {
+                "User ID": record.userid,
+                "username in tg": record.username,
+                "username in tg": record.username,
+                "firstname": record.firstname,
+                "lastname": record.lastname,
+                "fio": record.fio,
+                "birthdate": record.birthdate.strftime("%Y-%m-%d"),
+                "menstrual_cycle": record.menstrual_cycle,
+                "country": record.country,
+                "city": record.city,
+                "medication": record.medication,
+                "const_medication": record.const_medication,
+                "const_medication_name": record.const_medication_name,
+                "reminder_time": record.reminder_time,
+                "created_at": record.created_at.strftime("%Y-%m-%d"),
+            }
+            for record in user
+        ]
+        df_user = pd.DataFrame(user_data)
+
+        # Сохраняем DataFrame в Excel файл на одном листе
         excel_buffer = BytesIO()
         with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
-            df.to_excel(writer, index=False)
+            df_user.to_excel(
+                writer, sheet_name="Statistics", index=False, startrow=0
+            )
+            df_records.to_excel(
+                writer,
+                sheet_name="Statistics",
+                index=False,
+                startrow=len(df_user) + 2,
+            )
         excel_buffer.seek(0)
 
         # Сохраняем в временный файл для отправки
