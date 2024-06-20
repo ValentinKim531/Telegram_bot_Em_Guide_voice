@@ -4,11 +4,9 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-# Обновление и установка ffmpeg из альтернативного репозитория
+# Обновление и установка ffmpeg
 RUN apt-get update && \
-    apt-get install -y software-properties-common && \
-    add-apt-repository ppa:jonathonf/ffmpeg-4 && \
-    apt-get update && \
+    apt-get upgrade -y && \
     apt-get install -y ffmpeg
 
 RUN python -m venv /app/venv && \
