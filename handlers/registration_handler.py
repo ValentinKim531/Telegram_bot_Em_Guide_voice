@@ -1,5 +1,5 @@
 import os
-from aiogram import Router, F, Bot
+from aiogram import Router, F
 from aiogram.filters import CommandStart
 from aiogram.types import (
     InlineKeyboardButton,
@@ -23,7 +23,9 @@ router = Router()
 
 
 @router.message(CommandStart())
-async def process_start_command(message: Message):
+async def process_start_command(
+    message: Message, state: FSMContext, database: Database
+):
     """Send a message when the command /start is issued."""
     rus_button = InlineKeyboardButton(
         text="Русский", callback_data="set_lang_ru"
@@ -36,12 +38,30 @@ async def process_start_command(message: Message):
     user_id = message.from_user.id
     print(f"User ID in process_start_command: {user_id}")
 
+    # Check if user exists
+    existing_user = await database.get_entity_parameter(
+        user_id, "userid", User
+    )
+
+    existing_user_language = await database.get_entity_parameter(
+        user_id, "language", User
+    )
+    logger.info(f"existing_user language: {existing_user_language}")
+    if existing_user_language:
+        await state.update_data(
+            language=existing_user_language, existing_user=existing_user
+        )
+    else:
+        await state.update_data(language="ru", existing_user=existing_user)
+
     await message.answer(
         "Выберите язык / Тілді таңдаңыз:", reply_markup=markup
     )
 
 
-@router.callback_query(F.data.in_(["set_lang_ru", "set_lang_kk"]))
+@router.callback_query(
+    F.data.in_(["set_lang_ru", "set_lang_kk", "record_for_today"])
+)
 async def set_language(
     callback_query: CallbackQuery,
     state: FSMContext,
@@ -58,15 +78,6 @@ async def set_language(
     language = callback_query.data.split("_")[-1]
     print(f"language set_language: {language}")
 
-    # Обновляем состояние
-    await state.update_data(language=language)
-
-    # Получение данных из состояния
-    state_data = await state.get_data()
-
-    # Вывод содержимого состояния в консоль
-    print("State data:", state_data)
-
     if language == "ru":
         await callback_query.message.answer("Вы выбрали русский язык.")
     elif language == "kk":
@@ -78,6 +89,10 @@ async def set_language(
     existing_user = await database.get_entity_parameter(
         user_id, "userid", User
     )
+
+    # Обновляем состояние
+    await state.update_data(language=language, existing_user=existing_user)
+
     logger.info(f"existing_user: {existing_user}")
     if existing_user:
         await state.update_data(assistant_type="headache")

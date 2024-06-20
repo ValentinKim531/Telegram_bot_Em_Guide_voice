@@ -11,7 +11,7 @@ from settings import (
     create_dispatcher,
 )
 from services.yandex_service import get_iam_token, refresh_iam_token
-from handlers import registration_handler, voice_handler
+from handlers import registration_handler, voice_handler, menu_handlers
 
 # Настройки Telegram-бота
 logging.basicConfig(level=logging.INFO)
@@ -36,6 +36,8 @@ async def main():
     # Включение роутеров
     dp.include_router(registration_handler.router)
     dp.include_router(voice_handler.router)
+    dp.include_router(menu_handlers.router)
+
     await dp.start_polling(
         bot,
         skip_updates=True,

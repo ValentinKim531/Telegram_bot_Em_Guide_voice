@@ -317,7 +317,7 @@ async def handle_voice_message(
                                 os.remove(mp3_audio_path)
                                 logger.info(f"File {mp3_audio_path} deleted")
                     else:
-                        logger.error("JSON format not found in the response.")
+                        logger.error("It was not registration, but survey")
             except Exception as e:
                 logger.error(f"Error saving response to database: {e}")
 

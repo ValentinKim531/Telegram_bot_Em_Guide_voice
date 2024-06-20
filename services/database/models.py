@@ -89,6 +89,7 @@ class Survey(Base):
 
     __tablename__ = "survey"
 
+    survey_id = Column(Integer, primary_key=True)
     userid = Column(
         BigInteger,
         ForeignKey("users.userid", ondelete="CASCADE"),
@@ -107,7 +108,8 @@ class Survey(Base):
 
     def __repr__(self):
         return (
-            "<userid={}, "
+            "<survey_id={}, "
+            "userid={}, "
             "created_at='{}', "
             "updated_at='{}', "
             "headache_today='{}', "
@@ -117,6 +119,7 @@ class Survey(Base):
             "pain_type='{}', "
             "comments='{}')>"
         ).format(
+            self.survey_id,
             self.userid,
             self.created_at,
             self.updated_at,
