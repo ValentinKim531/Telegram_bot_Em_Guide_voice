@@ -115,7 +115,7 @@ async def send_statistics_file(
                     "%Y-%m-%d %H:%M"
                 ),
                 "Головная боль сегодня": record.headache_today,
-                "Медикаменты сегодня": record.medicament_today,
+                "Головная боль сегодня": record.medicament_today,
                 "Интенсивность боли": record.pain_intensity,
                 "Область боли": record.pain_area,
                 "Детали области": record.area_detail,
@@ -205,11 +205,13 @@ async def handle_any_message(message: Message, state: FSMContext):
 
     if user_lang == "kk":
         await message.answer(
-            text="Мен сіздің дауыс көмекшіңіз Цефалгологпын, "
-            "сізге дауыс хабарламасымен жауап беру қажет."
+            text="Мен сіздердің дауыс көмекшілеріңізбін. "
+            "Сізге дауыс хабарламасымен жауап беру қажет, "
+            "немесе сөйлесуді бастау үшін /start командасын басыңыз."
         )
     else:
         await message.answer(
             text="Я ваш голосовой помощник Цефалголог, "
-            "вам необходимо ответить голосовым сообщением."
+            "вам необходимо ответить голосовым сообщением,"
+            "либо нажмите команду /start для начала общения."
         )
