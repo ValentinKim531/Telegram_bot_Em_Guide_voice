@@ -89,7 +89,7 @@ class Survey(Base):
 
     __tablename__ = "survey"
 
-    survey_id = Column(Integer, primary_key=True)
+    survey_id = Column(Integer, primary_key=True, autoincrement=True)
     userid = Column(
         BigInteger,
         ForeignKey("users.userid", ondelete="CASCADE"),
@@ -98,6 +98,7 @@ class Survey(Base):
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
     headache_today = Column(String)
+    medicament_today = Column(String)
     pain_intensity = Column(Integer)
     pain_area = Column(String)
     area_detail = Column(String)
@@ -113,7 +114,8 @@ class Survey(Base):
             "created_at='{}', "
             "updated_at='{}', "
             "headache_today='{}', "
-            "pain_intensity='{}', "
+            "headache_today='{}', "
+            "medicament_today='{}', "
             "pain_area='{}', "
             "area_detail='{}', "
             "pain_type='{}', "
@@ -124,6 +126,7 @@ class Survey(Base):
             self.created_at,
             self.updated_at,
             self.headache_today,
+            self.medicament_today,
             self.pain_intensity,
             self.pain_area,
             self.area_detail,

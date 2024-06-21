@@ -115,6 +115,7 @@ async def send_statistics_file(
                     "%Y-%m-%d %H:%M"
                 ),
                 "Головная боль сегодня": record.headache_today,
+                "Медикаменты сегодня": record.medicament_today,
                 "Интенсивность боли": record.pain_intensity,
                 "Область боли": record.pain_area,
                 "Детали области": record.area_detail,
@@ -140,7 +141,6 @@ async def send_statistics_file(
         user_data = [
             {
                 "User ID": record.userid,
-                "username in tg": record.username,
                 "username in tg": record.username,
                 "firstname": record.firstname,
                 "lastname": record.lastname,

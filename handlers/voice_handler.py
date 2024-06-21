@@ -175,15 +175,16 @@ async def handle_voice_message(
                         json_start + len("```json") : json_end
                     ].strip()
                     response_data = json.loads(response_data_str)
-                    logger.info(f"Parsed response data: {response_data}")
 
                     # Добавляем userid в данные ответа
                     response_data["userid"] = message.from_user.id
                     logger.info(f"userid: {response_data['userid']}")
                     logger.info(f"response_data: {response_data}")
 
-                    # Преобразование даты рождения в объект date
-                    if "birthdate" in response_data:
+                    if (
+                        "birthdate" in response_data
+                        and response_data["birthdate"] is not None
+                    ):
                         try:
                             birthdate_str = response_data["birthdate"]
                             birthdate = datetime.strptime(
@@ -194,7 +195,10 @@ async def handle_voice_message(
                             logger.error(f"Error parsing birthdate: {e}")
 
                     # Преобразование времени напоминания в объект time
-                    if "reminder_time" in response_data:
+                    if (
+                        "reminder_time" in response_data
+                        and response_data["reminder_time"] is not None
+                    ):
                         try:
                             reminder_time_str = response_data["reminder_time"]
                             reminder_time = datetime.strptime(
@@ -229,6 +233,12 @@ async def handle_voice_message(
                                     )
                         else:
                             try:
+                                if response_data["pain_intensity"] is not None:
+                                    response_data["pain_intensity"] = int(
+                                        response_data["pain_intensity"]
+                                    )
+                                else:
+                                    response_data["pain_intensity"] = 0
                                 current_time = (
                                     get_current_time_in_almaty_naive()
                                 )
@@ -236,6 +246,9 @@ async def handle_voice_message(
                                     userid=response_data["userid"],
                                     headache_today=response_data[
                                         "headache_today"
+                                    ],
+                                    medicament_today=response_data[
+                                        "medicament_today"
                                     ],
                                     pain_intensity=int(
                                         response_data["pain_intensity"]
