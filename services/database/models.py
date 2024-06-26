@@ -114,8 +114,8 @@ class Survey(Base):
             "created_at='{}', "
             "updated_at='{}', "
             "headache_today='{}', "
-            "headache_today='{}', "
             "medicament_today='{}', "
+            "pain_intensity='{}', "
             "pain_area='{}', "
             "area_detail='{}', "
             "pain_type='{}', "
@@ -218,6 +218,24 @@ class Database(ABC):
         Delete an entity from the database.
 
         :param entity_id: The ID of the entity to delete.
+        :param model_class: The class of the model corresponding to the entity.
+
+        :return: None
+        """
+        pass
+
+    @abstractmethod
+    async def delete_entity_parameter(
+        self,
+        entity_id: int,
+        parameter: str,
+        model_class: type[Base],
+    ) -> None:
+        """
+        Delete a specific parameter of an entity.
+
+        :param entity_id: The ID of the entity.
+        :param parameter: The name of the parameter to delete.
         :param model_class: The class of the model corresponding to the entity.
 
         :return: None

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Optional, Any
 from aiogram.fsm.storage.base import BaseStorage
 
+
 load_dotenv()
 
 
@@ -36,10 +37,7 @@ def create_bot(settings: Settings) -> Bot:
     """
 
     session: AiohttpSession = AiohttpSession()
-    return Bot(
-        token=settings.bot_token,
-        session=session,
-    )
+    return Bot(token=settings.bot_token, session=session)
 
 
 def create_dispatcher(settings: Settings) -> Dispatcher:

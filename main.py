@@ -1,8 +1,12 @@
 import asyncio
 import logging
-from aiogram import Bot, Dispatcher
-from aiogram.fsm.storage.memory import MemoryStorage
+from datetime import datetime
 
+from aiogram import Bot, Dispatcher
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.base import StorageKey
+from aiogram.fsm.storage.memory import MemoryStorage
+from services.scheduler_service import ReminderManager
 from services.database import Postgres
 from settings import (
     TELEGRAM_BOT_TOKEN,
@@ -11,7 +15,14 @@ from settings import (
     create_dispatcher,
 )
 from services.yandex_service import get_iam_token, refresh_iam_token
-from handlers import registration_handler, voice_handler, menu_handlers
+from handlers import (
+    registration_handler,
+    voice_handler,
+    menu_handlers,
+    reminder_handler,
+    other_handler,
+)
+from utils.config import REDIS_URL
 
 # Настройки Telegram-бота
 logging.basicConfig(level=logging.INFO)
@@ -22,7 +33,9 @@ async def main():
     logger.info("Starting bot")
     get_iam_token()
     task = asyncio.create_task(refresh_iam_token())
-    _ = task  # Чтобы избежать предупреждения о неиспользуемой переменной
+    _ = task
+
+    database = Postgres()
 
     settings: Settings = Settings(
         bot_token=TELEGRAM_BOT_TOKEN,
@@ -33,11 +46,18 @@ async def main():
     bot: Bot = create_bot(settings=settings)
 
     dp: Dispatcher = create_dispatcher(settings=settings)
-    # Включение роутеров
+
     dp.include_router(registration_handler.router)
     dp.include_router(voice_handler.router)
     dp.include_router(menu_handlers.router)
+    dp.include_router(reminder_handler.router)
+    dp.include_router(other_handler.router)
 
+    # Логирование текущего времени
+    current_time = datetime.now()
+    logger.info(f"Current time at bot start: {current_time}")
+
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(
         bot,
         skip_updates=True,

@@ -1,5 +1,4 @@
 from datetime import datetime
-
 from aiogram import Router, F, Bot
 from aiogram.types import Message, FSInputFile
 from aiogram.fsm.context import FSMContext
@@ -8,6 +7,7 @@ import aiohttp
 import os
 import logging
 from services.openai_service import process_question, get_new_thread_id
+from services.scheduler_service import ReminderManager
 from services.yandex_service import (
     recognize_speech,
     synthesize_speech,
@@ -32,6 +32,10 @@ async def handle_voice_message(
 ):
     try:
         logger.info("Received voice message")
+
+        # Логирование текущего состояния
+        current_state = await state.get_state()
+        logger.info(f"Current state in handle_voice_message: {current_state}")
 
         user_id = message.from_user.id
         data = await state.get_data()
@@ -99,7 +103,7 @@ async def handle_voice_message(
                 f"Using thread_id: {thread_id} with assistant_type: {assistant_type}"
             )
 
-            # Обработка запроса с помощью соответствующего GPT-3 ассистента
+            # Обработка запроса с помощью соответствующего GPT-4 ассистента
             assistant_id = (
                 ASSISTANT2_ID
                 if assistant_type == "registration"
@@ -143,6 +147,12 @@ async def handle_voice_message(
                 voice=FSInputFile(mp3_audio_path), caption=response_text
             )
             logger.info("Voice response successfully sent")
+
+            # Логирование текущего состояния
+            current_state = await state.get_state()
+            logger.info(
+                f"Current state in handle_voice_message: {current_state}"
+            )
         except Exception as e:
             logger.error(f"Failed to send voice response: {e}")
             await message.answer("Не удалось отправить голосовой ответ.")
@@ -164,6 +174,7 @@ async def handle_voice_message(
                 final_response_json = msg.content[0].text.value
 
         if final_response_json:
+            await state.clear()
             try:
                 logger.info(
                     f"Extracting JSON from response: {final_response_json}"
@@ -208,8 +219,21 @@ async def handle_voice_message(
                             logger.info(
                                 f"Converted reminder_time: {reminder_time}"
                             )
+
+                            reminder_manager = ReminderManager(
+                                database, bot, state
+                            )
+                            await reminder_manager.schedule_reminder(
+                                user_id, reminder_time
+                            )
+
                         except ValueError as e:
                             logger.error(f"Error parsing reminder_time: {e}")
+
+                    # Преобразование пустых строк в None или значения по умолчанию
+                    for key in response_data:
+                        if response_data[key] == "":
+                            response_data[key] = None
 
                     try:
                         if assistant_type == "registration":
@@ -231,6 +255,7 @@ async def handle_voice_message(
                                     logger.error(
                                         f"Error updating {parameter}: {e}"
                                     )
+
                         else:
                             try:
                                 if response_data["pain_intensity"] is not None:
@@ -239,6 +264,9 @@ async def handle_voice_message(
                                     )
                                 else:
                                     response_data["pain_intensity"] = 0
+                                    logger.info(
+                                        f"pain_intensity: {response_data['pain_intensity']}"
+                                    )
                                 current_time = (
                                     get_current_time_in_almaty_naive()
                                 )
@@ -250,9 +278,9 @@ async def handle_voice_message(
                                     medicament_today=response_data[
                                         "medicament_today"
                                     ],
-                                    pain_intensity=int(
-                                        response_data["pain_intensity"]
-                                    ),
+                                    pain_intensity=response_data[
+                                        "pain_intensity"
+                                    ],
                                     pain_area=response_data["pain_area"],
                                     area_detail=response_data["area_detail"],
                                     pain_type=response_data["pain_type"],
@@ -281,6 +309,9 @@ async def handle_voice_message(
                         logger.info(
                             "Registration completed. Switching to headache questions."
                         )
+
+                        await state.set_state(Form.waiting_for_voice)
+
                         # Отправка вопроса "Здравствуйте" второму ассистенту
                         new_thread_id = await get_new_thread_id()
                         response_text, new_thread_id, full_response = (

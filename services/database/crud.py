@@ -1,5 +1,5 @@
 from typing import Optional, Union
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
     AsyncSession,
@@ -156,3 +156,30 @@ class Postgres(Database):
                     await session.commit()
         except Exception as e:
             print(f"class <Postgres> delete_entity error: {e}")
+
+    async def delete_entity_parameter(
+        self,
+        entity_id: int,
+        parameter: str,
+        model_class: type[Base],
+    ) -> None:
+        """
+        Delete a specific parameter of an entity.
+
+        :param entity_id: The ID of the entity.
+        :param parameter: The name of the parameter to delete.
+        :param model_class: The class of the model corresponding to the entity.
+
+        :return: None
+        """
+        try:
+            async with self.Session() as session:
+                stmt = (
+                    update(model_class)
+                    .where(model_class.userid == entity_id)
+                    .values({parameter: None})
+                )
+                await session.execute(stmt)
+                await session.commit()
+        except Exception as e:
+            print(f"class <Postgres> delete_entity_parameter error: {e}")

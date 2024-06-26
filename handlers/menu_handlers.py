@@ -20,7 +20,9 @@ router = Router()
 
 
 @router.message(F.text.in_("/headache"))
-async def menu_command_headache(message: Message, state: FSMContext):
+async def menu_command_headache(
+    message: Message, state: FSMContext, database: Database
+):
 
     record_for_today = InlineKeyboardButton(
         text="Запись на сегодня", callback_data="record_for_today"
@@ -28,9 +30,11 @@ async def menu_command_headache(message: Message, state: FSMContext):
 
     markup = InlineKeyboardMarkup(inline_keyboard=[[record_for_today]])
 
-    data = await state.get_data()
-    existing_user = data.get("existing_user")
-    print(existing_user)
+    # Check if user exists
+    user_id = message.from_user.id
+    existing_user = await database.get_entity_parameter(
+        user_id, "userid", User
+    )
 
     # Путь к изображению
     photo_path = "static/img/diary.jpeg"
@@ -43,12 +47,13 @@ async def menu_command_headache(message: Message, state: FSMContext):
         )
     else:
         await message.answer(
-            text="Пожалуйста, сначала зарегистрируйтесь, выбрав язык"
+            text="Пожалуйста, сначала зарегистрируйтесь, выбрав язык."
+            "Вы можете это сделать нажав /start \nв меню ↙️"
         )
 
 
 @router.message(F.text.in_("/statistics"))
-async def menu_command_statistics(message: Message, state: FSMContext):
+async def menu_command_statistics(message: Message, database: Database):
     download_statistics_button = InlineKeyboardButton(
         text="Скачать статистику", callback_data="download_statistics"
     )
@@ -57,9 +62,11 @@ async def menu_command_statistics(message: Message, state: FSMContext):
         inline_keyboard=[[download_statistics_button]]
     )
 
-    data = await state.get_data()
-    existing_user = data.get("existing_user")
-    print(existing_user)
+    # Check if user exists
+    user_id = message.from_user.id
+    existing_user = await database.get_entity_parameter(
+        user_id, "userid", User
+    )
 
     # Путь к изображению
     photo_path = "static/img/diary.jpeg"
@@ -72,7 +79,8 @@ async def menu_command_statistics(message: Message, state: FSMContext):
         )
     else:
         await message.answer(
-            text="Пожалуйста, сначала зарегистрируйтесь, выбрав язык"
+            text="Пожалуйста, сначала зарегистрируйтесь, выбрав язык."
+            "Вы можете это сделать нажав /start \nв меню ↙️"
         )
 
 
@@ -193,25 +201,4 @@ async def send_statistics_file(
         logging.error(f"Error generating statistics for user {user_id}: {e}")
         await callback_query.message.answer(
             "Произошла ошибка при попытке получить статистику."
-        )
-
-
-@router.message()
-async def handle_any_message(message: Message, state: FSMContext):
-
-    data = await state.get_data()
-    user_lang = data.get("language", "ru")
-    print(user_lang)
-
-    if user_lang == "kk":
-        await message.answer(
-            text="Мен сіздердің дауыс көмекшілеріңізбін. "
-            "Сізге дауыс хабарламасымен жауап беру қажет, "
-            "немесе сөйлесуді бастау үшін /start командасын басыңыз."
-        )
-    else:
-        await message.answer(
-            text="Я ваш голосовой помощник Цефалголог, "
-            "вам необходимо ответить голосовым сообщением,"
-            "либо нажмите команду /start для начала общения."
         )
