@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 from enum import Enum
+from typing import Union, Optional, Type, Any
+
 from sqlalchemy import (
     Column,
     BigInteger,
@@ -163,10 +165,10 @@ class Database(ABC):
     @abstractmethod
     async def get_entity_parameter(
         self,
-        entity_id: int,
-        parameter: str,
         model_class: type[Base],
-    ) -> any:
+        filters: Optional[dict] = None,
+        parameter: Optional[str] = None,
+    ) -> Optional[Union[Base, Any]]:
         """
         Get a specific parameter of an entity.
 
@@ -192,7 +194,7 @@ class Database(ABC):
     @abstractmethod
     async def update_entity_parameter(
         self,
-        entity_id: int,
+        entity_id: Union[int, tuple],
         parameter: str,
         value: any,
         model_class: type[Base],

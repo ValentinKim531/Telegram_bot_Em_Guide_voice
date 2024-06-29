@@ -28,7 +28,7 @@ async def settings_command(message: Message, database: Database):
     # Check if user exists
     user_id = message.from_user.id
     existing_user = await database.get_entity_parameter(
-        user_id, "userid", User
+        model_class=User, filters={"userid": user_id}
     )
 
     if existing_user:

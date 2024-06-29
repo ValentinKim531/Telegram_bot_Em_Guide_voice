@@ -1,5 +1,15 @@
-from typing import Optional, Union
-from sqlalchemy import select, update
+import logging
+from typing import Optional, Union, Type, Any
+from sqlalchemy import (
+    select,
+    update,
+    and_,
+    Column,
+    cast,
+    String,
+    Integer,
+    func,
+)
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
     AsyncSession,
@@ -7,6 +17,9 @@ from sqlalchemy.ext.asyncio import (
 )
 from .models import Base, Database
 from utils.config import DB_NAME, DB_PASSWORD, DB_USER, DB_HOST, DB_PORT
+
+
+logger = logging.getLogger(__name__)
 
 
 class Postgres(Database):
@@ -71,28 +84,32 @@ class Postgres(Database):
 
     async def get_entity_parameter(
         self,
-        entity_id: int,
-        parameter: str,
         model_class: type[Base],
-    ) -> any:
+        filters: Optional[dict] = None,
+        parameter: Optional[str] = None,
+    ) -> Optional[Union[Base, Any]]:
         """
-        Get a specific parameter of an entity.
+        Get an entity or a specific parameter of an entity from the database.
 
-        :param entity_id: The ID of the entity.
-        :param parameter: The name of the parameter.
         :param model_class: The class of the model corresponding to the entity.
+        :param filters: A dictionary of filters to apply.
+        :param parameter: The specific parameter to retrieve.
 
-        :return: The value of the specified parameter.
+        :return: The entity or the value of the specified parameter.
         """
         try:
             async with self.Session() as session:
-                entity = await session.get(model_class, entity_id)
-                if entity:
-                    return getattr(entity, parameter, None)
+                if filters:
+                    stmt = select(model_class).filter_by(**filters)
+                    result = await session.execute(stmt)
+                    entity = result.scalars().first()
+
+                    if entity and parameter:
+                        return getattr(entity, parameter, None)
+                    return entity
+
         except Exception as e:
-            print(
-                f"Error in get_entity_parameter for {model_class.__name__}: {e}"
-            )
+            logger.error(f"Error in get_entity_parameter: {e}")
         return None
 
     async def get_entities(self, model_class: type[Base]) -> Optional[list]:
@@ -113,7 +130,7 @@ class Postgres(Database):
 
     async def update_entity_parameter(
         self,
-        entity_id: int,
+        entity_id: Union[int, tuple],
         parameter: str,
         value: any,
         model_class: type[Base],
@@ -121,7 +138,7 @@ class Postgres(Database):
         """
         Update a specific parameter of an entity.
 
-        :param entity_id: The ID of the entity.
+        :param entity_id: The ID of the entity. It can be an int for single key or a tuple for composite key.
         :param parameter: The name of the parameter to update.
         :param value: The new value of the parameter.
         :param model_class: The class of the model corresponding to the entity.
@@ -130,9 +147,13 @@ class Postgres(Database):
         """
         try:
             async with self.Session() as session:
-                user = await session.get(model_class, entity_id)
-                if user:
-                    setattr(user, parameter, value)
+                if isinstance(entity_id, tuple):
+                    entity = await session.get(model_class, entity_id)
+                else:
+                    entity = await session.get(model_class, (entity_id,))
+
+                if entity:
+                    setattr(entity, parameter, value)
                     await session.commit()
         except Exception as e:
             print(f"class <Postgres> update_entity_parameter error: {e}")

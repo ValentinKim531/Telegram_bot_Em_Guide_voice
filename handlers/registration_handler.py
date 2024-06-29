@@ -43,13 +43,16 @@ async def process_start_command(
 
     # Check if user exists
     existing_user = await database.get_entity_parameter(
-        user_id, "userid", User
+        model_class=User, filters={"userid": user_id}
     )
+    logger.info(f"existing_user in databasee checking: {existing_user}")
 
     existing_user_language = await database.get_entity_parameter(
-        user_id, "language", User
+        model_class=User, filters={"userid": user_id}, parameter="language"
     )
+
     logger.info(f"existing_user language: {existing_user_language}")
+
     if existing_user_language:
         await state.update_data(
             language=existing_user_language, existing_user=existing_user
@@ -66,7 +69,10 @@ async def process_start_command(
     F.data.in_(["set_lang_ru", "set_lang_kk", "record_for_today"])
 )
 async def set_language(
-    callback_query: CallbackQuery, state: FSMContext, database: Database
+    callback_query: CallbackQuery,
+    state: FSMContext,
+    database: Database,
+    bot: Bot,
 ):
     """Handle language selection."""
 
@@ -79,20 +85,33 @@ async def set_language(
     language = callback_query.data.split("_")[-1]
     print(f"language set_language: {language}")
 
+    messages_to_delete = []
+
     if language == "ru":
-        await callback_query.message.answer("Вы выбрали русский язык.")
+        delete_message_ru = await callback_query.message.answer(
+            "Вы выбрали русский язык."
+        )
+        messages_to_delete.append(delete_message_ru.message_id)
     elif language == "kk":
-        await callback_query.message.answer("Сіз қазақ тілін таңдадыңыз.")
+        delete_message_kz = await callback_query.message.answer(
+            "Сіз қазақ тілін таңдадыңыз."
+        )
+        messages_to_delete.append(delete_message_kz.message_id)
 
     await callback_query.answer(text="Одну секундочку...")
 
     # Check if user exists
     existing_user = await database.get_entity_parameter(
-        user_id, "userid", User
+        model_class=User, filters={"userid": user_id}
     )
 
     # Обновляем состояние
     await state.update_data(language=language, existing_user=existing_user)
+    await callback_query.message.delete()
+    delete_message = await callback_query.message.answer(
+        text="Пожалуйста, ожидайте..."
+    )
+    messages_to_delete.append(delete_message.message_id)
 
     logger.info(f"existing_user: {existing_user}")
     if existing_user:
@@ -109,6 +128,15 @@ async def set_language(
             last_name,
         )
 
+    # Удаляем все сообщения
+    try:
+        for message_id in messages_to_delete:
+            await bot.delete_message(
+                chat_id=callback_query.message.chat.id, message_id=message_id
+            )
+    except Exception as e:
+        logger.error(f"Failed to delete message: {e}")
+
 
 async def process_registration(
     message: Message,
@@ -118,8 +146,19 @@ async def process_registration(
     username: str,
     first_name: str,
     last_name: str,
+    bot: Optional[Bot] = None,
+    message_id: Optional[int] = None,
 ):
     logger.info("Processing registration questions")
+
+    # Удаляем сообщение, если его идентификатор передан
+    if message_id:
+        try:
+            await bot.delete_message(
+                chat_id=message.chat.id, message_id=message_id
+            )
+        except Exception as e:
+            logger.error(f"Failed to delete message: {e}")
 
     data = await state.get_data()
     user_lang = data.get("language", "ru")
@@ -198,10 +237,20 @@ async def start_survey(
     state: FSMContext,
     database: Database,
     message: Optional[Message] = None,
+    message_id: Optional[int] = None,
     bot: Optional[Bot] = None,
     user_id: Optional = None,
 ):
     logger.info("Starting survey questions")
+
+    # Удаляем сообщение, если его идентификатор передан
+    if message_id:
+        try:
+            await bot.delete_message(
+                chat_id=message.chat.id, message_id=message_id
+            )
+        except Exception as e:
+            logger.error(f"Failed to delete message: {e}")
 
     data = await state.get_data()
     user_lang = data.get("language", "ru")
@@ -240,17 +289,23 @@ async def start_survey(
 
     try:
         if user_id:
-            await bot.send_voice(
+            bot_voice_message = await bot.send_voice(
                 chat_id=user_id,
                 voice=FSInputFile(mp3_audio_path),
                 caption=response_text,
             )
+            bot_voice_message_id = bot_voice_message.message_id
             logger.info("Voice response for survey successfully sent")
         else:
-            await message.answer_voice(
+            bot_voice_message = await message.answer_voice(
                 voice=FSInputFile(mp3_audio_path), caption=response_text
             )
+            bot_voice_message_id = bot_voice_message.message_id
             logger.info("Voice response for survey successfully sent")
+
+        # Сохранение идентификатора голосового сообщения бота в состоянии
+        await state.update_data(bot_voice_message_id=bot_voice_message_id)
+
     except Exception as e:
         logger.error(f"Failed to send voice response for survey: {e}")
         await message.answer("Не удалось отправить голосовой ответ.")

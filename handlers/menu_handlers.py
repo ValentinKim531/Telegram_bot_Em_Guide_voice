@@ -25,7 +25,7 @@ async def menu_command_headache(
 ):
 
     record_for_today = InlineKeyboardButton(
-        text="Запись на сегодня", callback_data="record_for_today"
+        text="📝 Запись на сегодня", callback_data="record_for_today"
     )
 
     markup = InlineKeyboardMarkup(inline_keyboard=[[record_for_today]])
@@ -33,7 +33,7 @@ async def menu_command_headache(
     # Check if user exists
     user_id = message.from_user.id
     existing_user = await database.get_entity_parameter(
-        user_id, "userid", User
+        model_class=User, filters={"userid": user_id}
     )
 
     # Путь к изображению
@@ -65,7 +65,7 @@ async def menu_command_statistics(message: Message, database: Database):
     # Check if user exists
     user_id = message.from_user.id
     existing_user = await database.get_entity_parameter(
-        user_id, "userid", User
+        model_class=User, filters={"userid": user_id}
     )
 
     # Путь к изображению

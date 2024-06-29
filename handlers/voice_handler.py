@@ -1,4 +1,6 @@
 from datetime import datetime
+from typing import Optional
+
 from aiogram import Router, F, Bot
 from aiogram.types import Message, FSInputFile
 from aiogram.fsm.context import FSMContext
@@ -25,17 +27,31 @@ logger = logging.getLogger(__name__)
 
 @router.message(Form.waiting_for_voice, F.voice)
 async def handle_voice_message(
-    message: Message,
-    state: FSMContext,
-    bot: Bot,
-    database: Database,
+    message: Message, state: FSMContext, bot: Bot, database: Database
 ):
     try:
         logger.info("Received voice message")
+        user_voice_messages_to_delete = []
+        user_voice_messages_to_delete.append(message.message_id)
 
         # Логирование текущего состояния
         current_state = await state.get_state()
         logger.info(f"Current state in handle_voice_message: {current_state}")
+
+        # Удаление предыдущего голосового сообщения бота
+        data = await state.get_data()
+        previous_bot_voice_message_id = data.get("bot_voice_message_id")
+        if previous_bot_voice_message_id:
+            try:
+                await bot.delete_message(
+                    chat_id=message.chat.id,
+                    message_id=previous_bot_voice_message_id,
+                )
+                logger.info("Previous bot voice message deleted")
+            except Exception as e:
+                logger.error(
+                    f"Failed to delete previous bot voice message: {e}"
+                )
 
         user_id = message.from_user.id
         data = await state.get_data()
@@ -79,7 +95,7 @@ async def handle_voice_message(
         elif recognized_text_original is None and user_lang == "kk":
             response_text = "Жауабыңызды қайта қайталаңызшы."
         else:
-
+            messages_to_delete = []
             if user_lang == "kk":
                 recognized_text = translate_text(
                     recognized_text_original,
@@ -87,13 +103,16 @@ async def handle_voice_message(
                     target_lang="ru",
                 )
                 logger.info(f"Recognized text: {recognized_text}")
-                await message.answer(
+
+                delete_message_kz = await message.answer(
                     text=f"Сіз '{recognized_text_original}' дедіңіз, жауап күтіңіз..."
                 )
+                messages_to_delete.append(delete_message_kz.message_id)
             else:
-                await message.answer(
+                delete_message_ru = await message.answer(
                     text=f"Вы произнесли: '{recognized_text_original}', ожидайте ответа..."
                 )
+                messages_to_delete.append(delete_message_ru.message_id)
                 recognized_text = recognized_text_original
 
             # Получаем thread_id и тип ассистента из состояния
@@ -143,9 +162,16 @@ async def handle_voice_message(
             mp3_audio_file.write(audio_response_bytes)
 
         try:
-            await message.answer_voice(
+            bot_voice_message = await message.answer_voice(
                 voice=FSInputFile(mp3_audio_path), caption=response_text
             )
+            bot_voice_message_id = bot_voice_message.message_id
+            await state.update_data(bot_voice_message_id=bot_voice_message_id)
+            current_state = await state.get_state()
+            logger.info(
+                f"Current state in handle_voice_message: {current_state}"
+            )
+
             logger.info("Voice response successfully sent")
 
             # Логирование текущего состояния
@@ -166,6 +192,23 @@ async def handle_voice_message(
             if os.path.exists("voice.mp3"):
                 os.remove("voice.mp3")
                 logger.info("File voice.mp3 deleted")
+
+            try:
+                for message_id in user_voice_messages_to_delete:
+                    await bot.delete_message(
+                        chat_id=message.chat.id, message_id=message_id
+                    )
+                logger.info("User voice messages deleted")
+            except Exception as e:
+                logger.error(f"Failed to delete user voice message: {e}")
+
+            try:
+                for message_id in messages_to_delete:
+                    await bot.delete_message(
+                        chat_id=message.chat.id, message_id=message_id
+                    )
+            except Exception as e:
+                logger.error(f"Failed to delete message: {e}")
 
         # Сохранение ответов в базу данных
         final_response_json = None
@@ -267,41 +310,91 @@ async def handle_voice_message(
                                     logger.info(
                                         f"pain_intensity: {response_data['pain_intensity']}"
                                     )
-                                current_time = (
-                                    get_current_time_in_almaty_naive()
+                                current_date = (
+                                    get_current_time_in_almaty_naive().date()
                                 )
-                                survey_data = Survey(
-                                    userid=response_data["userid"],
-                                    headache_today=response_data[
-                                        "headache_today"
-                                    ],
-                                    medicament_today=response_data[
-                                        "medicament_today"
-                                    ],
-                                    pain_intensity=response_data[
-                                        "pain_intensity"
-                                    ],
-                                    pain_area=response_data["pain_area"],
-                                    area_detail=response_data["area_detail"],
-                                    pain_type=response_data["pain_type"],
-                                    comments=response_data["comments"],
-                                    created_at=current_time,
-                                    updated_at=current_time,
+                                existing_survey = (
+                                    await database.get_entity_parameter(
+                                        model_class=Survey,
+                                        filters={
+                                            "userid": response_data["userid"],
+                                            "created_at": current_date,
+                                        },
+                                    )
                                 )
-                                await database.add_entity(
-                                    entity_data=survey_data,
-                                    model_class=Survey,
-                                )
-                                logger.info("Updated successfully")
+
+                                if existing_survey:
+                                    # Обновление существующей записи
+                                    try:
+                                        for (
+                                            parameter,
+                                            value,
+                                        ) in response_data.items():
+                                            if (
+                                                parameter != "userid"
+                                            ):  # userid не нужно обновлять
+                                                await database.update_entity_parameter(
+                                                    entity_id=(
+                                                        existing_survey.survey_id,
+                                                        existing_survey.userid,
+                                                    ),  # используем составной ключ
+                                                    parameter=parameter,
+                                                    value=value,
+                                                    model_class=Survey,
+                                                )
+                                        logger.info(
+                                            "Updated existing survey successfully"
+                                        )
+                                    except Exception as e:
+                                        logger.error(
+                                            f"Error updating existing survey: {e}"
+                                        )
+                                else:
+                                    # Добавление новой записи
+                                    try:
+                                        survey_data = Survey(
+                                            userid=response_data["userid"],
+                                            headache_today=response_data[
+                                                "headache_today"
+                                            ],
+                                            medicament_today=response_data[
+                                                "medicament_today"
+                                            ],
+                                            pain_intensity=response_data[
+                                                "pain_intensity"
+                                            ],
+                                            pain_area=response_data[
+                                                "pain_area"
+                                            ],
+                                            area_detail=response_data[
+                                                "area_detail"
+                                            ],
+                                            pain_type=response_data[
+                                                "pain_type"
+                                            ],
+                                            comments=response_data["comments"],
+                                            created_at=current_date,
+                                            updated_at=current_date,
+                                        )
+                                        await database.add_entity(
+                                            entity_data=survey_data,
+                                            model_class=Survey,
+                                        )
+                                        logger.info(
+                                            "Added new survey successfully"
+                                        )
+                                    except Exception as e:
+                                        logger.error(
+                                            f"Error adding new survey: {e}"
+                                        )
+
                             except Exception as e:
                                 logger.error(
-                                    f"Error updating {response_data}: {e}"
+                                    f"Error adding or updading response to database: {e}"
                                 )
 
                     except Exception as e:
-                        logger.error(
-                            f"Error updating or adding user data: {e}"
-                        )
+                        logger.error(f"Error saving response to database: {e}")
 
                     # Проверка завершения блока регистрации
                     if assistant_type == "registration":

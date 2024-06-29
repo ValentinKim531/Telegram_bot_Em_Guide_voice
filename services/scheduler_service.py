@@ -69,12 +69,14 @@ class ReminderManager:
     async def send_reminder(self, user_id):
         try:
             user = await self.database.get_entity_parameter(
-                user_id, "userid", User
+                model_class=User, filters={"userid": user_id}
             )
             if user:
                 now = datetime.now(pytz.timezone("Asia/Almaty"))
                 reminder_time = await self.database.get_entity_parameter(
-                    user_id, "reminder_time", User
+                    model_class=User,
+                    filters={"userid": user_id},
+                    parameter="reminder_time",
                 )
                 if (
                     reminder_time
