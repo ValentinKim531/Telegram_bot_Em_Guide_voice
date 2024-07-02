@@ -93,7 +93,6 @@ class ReminderManager:
                     # Запускаем процесс опроса
                     await start_survey(
                         state=self.state,
-                        database=self.database,
                         bot=self.bot,
                         user_id=user_id,
                     )

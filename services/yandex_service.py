@@ -51,8 +51,8 @@ def recognize_speech(audio_content, lang="ru-RU"):
 
 def synthesize_speech(text, lang_code):
     voice_settings = {
-        "ru": {"lang": "ru-RU", "voice": "oksana"},
-        "kk": {"lang": "kk-KK", "voice": "amira"},
+        "ru": {"lang": "ru-RU", "voice": "jane", "emotion": "good"},
+        "kk": {"lang": "kk-KK", "voice": "amira", "emotion": "neutral"},
     }
     settings = voice_settings.get(lang_code, voice_settings["ru"])
     url = "https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize"
@@ -61,9 +61,11 @@ def synthesize_speech(text, lang_code):
         "text": text,
         "lang": settings["lang"],
         "voice": settings["voice"],
+        "emotion": settings["emotion"],
         "folderId": YANDEX_FOLDER_ID,
         "format": "mp3",
         "sampleRateHertz": 48000,
+        "speed": "1.2",
     }
     response = requests.post(url, headers=headers, data=data, stream=True)
     if response.status_code == 200:

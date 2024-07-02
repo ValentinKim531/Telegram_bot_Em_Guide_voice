@@ -66,7 +66,9 @@ async def process_start_command(
 
 
 @router.callback_query(
-    F.data.in_(["set_lang_ru", "set_lang_kk", "record_for_today"])
+    F.data.in_(
+        ["set_lang_ru", "set_lang_kk", "record_for_ru", "record_for_kk"]
+    )
 )
 async def set_language(
     callback_query: CallbackQuery,
@@ -80,19 +82,24 @@ async def set_language(
     username = callback_query.from_user.username
     first_name = callback_query.from_user.first_name
     last_name = callback_query.from_user.last_name
-    print(f"User ID in set_language: {user_id}")
 
     language = callback_query.data.split("_")[-1]
-    print(f"language set_language: {language}")
+
+    await database.update_entity_parameter(
+        entity_id=user_id,
+        parameter="language",
+        value=language,
+        model_class=User,
+    )
 
     messages_to_delete = []
 
-    if language == "ru":
+    if callback_query.data == "set_lang_ru":
         delete_message_ru = await callback_query.message.answer(
             "Вы выбрали русский язык."
         )
         messages_to_delete.append(delete_message_ru.message_id)
-    elif language == "kk":
+    elif callback_query.data == "set_lang_kk":
         delete_message_kz = await callback_query.message.answer(
             "Сіз қазақ тілін таңдадыңыз."
         )
@@ -108,15 +115,21 @@ async def set_language(
     # Обновляем состояние
     await state.update_data(language=language, existing_user=existing_user)
     await callback_query.message.delete()
-    delete_message = await callback_query.message.answer(
-        text="Пожалуйста, ожидайте..."
-    )
+    if language == "kk":
+        delete_message = await callback_query.message.answer(
+            text="Өтінемін, күтіңіз..."
+        )
+    else:
+        delete_message = await callback_query.message.answer(
+            text="Пожалуйста, ожидайте..."
+        )
+
     messages_to_delete.append(delete_message.message_id)
 
     logger.info(f"existing_user: {existing_user}")
     if existing_user:
         await state.update_data(assistant_type="headache")
-        await start_survey(state, database, callback_query.message)
+        await start_survey(state, callback_query.message)
     else:
         await process_registration(
             callback_query.message,
@@ -187,7 +200,7 @@ async def process_registration(
     )
     await database.add_entity(user_data, User)
 
-    # Направляем первый вопрос по регистрации
+    # Направляем первый вопрос по регистрации в GPT
     response_text, new_thread_id, full_response = await process_question(
         "Здравствуйте",
         thread_id,
@@ -235,7 +248,6 @@ async def process_registration(
 
 async def start_survey(
     state: FSMContext,
-    database: Database,
     message: Optional[Message] = None,
     message_id: Optional[int] = None,
     bot: Optional[Bot] = None,

@@ -3,10 +3,7 @@ import logging
 from datetime import datetime
 
 from aiogram import Bot, Dispatcher
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
-from services.scheduler_service import ReminderManager
 from services.database import Postgres
 from settings import (
     TELEGRAM_BOT_TOKEN,
@@ -20,9 +17,7 @@ from handlers import (
     voice_handler,
     menu_handlers,
     reminder_handler,
-    other_handler,
 )
-from utils.config import REDIS_URL
 
 # Настройки Telegram-бота
 logging.basicConfig(level=logging.INFO)
@@ -51,7 +46,7 @@ async def main():
     dp.include_router(voice_handler.router)
     dp.include_router(menu_handlers.router)
     dp.include_router(reminder_handler.router)
-    dp.include_router(other_handler.router)
+    # dp.include_router(other_handler.router)
 
     # Логирование текущего времени
     current_time = datetime.now()

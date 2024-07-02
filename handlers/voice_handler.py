@@ -1,6 +1,4 @@
 from datetime import datetime
-from typing import Optional
-
 from aiogram import Router, F, Bot
 from aiogram.types import Message, FSInputFile
 from aiogram.fsm.context import FSMContext
@@ -9,6 +7,7 @@ import aiohttp
 import os
 import logging
 from services.openai_service import process_question, get_new_thread_id
+from services.save_survey_response import save_survey_response
 from services.scheduler_service import ReminderManager
 from services.yandex_service import (
     recognize_speech,
@@ -25,7 +24,7 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 
-@router.message(Form.waiting_for_voice, F.voice)
+@router.message(Form.waiting_for_voice, F.voice | F.text)
 async def handle_voice_message(
     message: Message, state: FSMContext, bot: Bot, database: Database
 ):
@@ -57,43 +56,56 @@ async def handle_voice_message(
         data = await state.get_data()
         user_lang = data.get("language", "ru")
         logger.info(f"User language in handle_voice_message: {user_lang}")
+        file_content = []
+        if message.voice:
+            voice_file_id = message.voice.file_id
+            logger.info(f"Voice file id: {voice_file_id}")
+            file_info = await bot.get_file(voice_file_id)
+            file_url = f"https://api.telegram.org/file/bot{bot.token}/{file_info.file_path}"
+            logger.info(f"File URL: {file_url}")
 
-        voice_file_id = message.voice.file_id
-        logger.info(f"Voice file id: {voice_file_id}")
-        file_info = await bot.get_file(voice_file_id)
-        file_url = f"https://api.telegram.org/file/bot{bot.token}/{file_info.file_path}"
-        logger.info(f"File URL: {file_url}")
+            async with aiohttp.ClientSession() as session:
+                async with session.get(file_url) as response:
+                    if response.status == 200:
+                        file_content = await response.read()
+                        with open("voice.oga", "wb") as voice_file:
+                            voice_file.write(file_content)
+                        logger.info(
+                            "File successfully downloaded and saved as voice.oga"
+                        )
+                    else:
+                        logger.error(
+                            f"Failed to download file: HTTP status {response.status}"
+                        )
+                        return
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(file_url) as response:
-                if response.status == 200:
-                    file_content = await response.read()
-                    with open("voice.oga", "wb") as voice_file:
-                        voice_file.write(file_content)
-                    logger.info(
-                        "File successfully downloaded and saved as voice.oga"
-                    )
-                else:
-                    logger.error(
-                        f"Failed to download file: HTTP status {response.status}"
-                    )
-                    return
-
-        # Конвертация файла в mp3
-        logger.info("Converting OGA to MP3")
-        audio = AudioSegment.from_file("voice.oga")
-        audio.export("voice.mp3", format="mp3")
-        logger.info("File successfully converted to voice.mp3")
+            # Конвертация файла в mp3
+            logger.info("Converting OGA to MP3")
+            audio = AudioSegment.from_file("voice.oga")
+            audio.export("voice.mp3", format="mp3")
+            logger.info("File successfully converted to voice.mp3")
 
         # Преобразование аудио в текст с использованием Yandex STT
         logger.info("Starting transcription with Yandex STT")
-        recognized_text_original = recognize_speech(
-            file_content, lang="kk-KK" if user_lang == "kk" else "ru-RU"
-        )
+        if file_content:
+            recognized_text_original = recognize_speech(
+                file_content, lang="kk-KK" if user_lang == "kk" else "ru-RU"
+            )
+        else:
+            recognized_text_original = message.text
         if recognized_text_original is None and user_lang == "ru":
             response_text = "Пожалуйста, повторите ваш ответ еще раз"
         elif recognized_text_original is None and user_lang == "kk":
             response_text = "Жауабыңызды қайта қайталаңызшы."
+        elif recognized_text_original in [
+            "/headache",
+            "/calendar",
+            "/statistics",
+            "/settings",
+        ]:
+            await message.answer(
+                "Если вы хотите воспользоваться меню, то сначала закончите опрос или выберите язык, пожалуйста."
+            )
         else:
             messages_to_delete = []
             if user_lang == "kk":
@@ -105,12 +117,12 @@ async def handle_voice_message(
                 logger.info(f"Recognized text: {recognized_text}")
 
                 delete_message_kz = await message.answer(
-                    text=f"Сіз '{recognized_text_original}' дедіңіз, жауап күтіңіз..."
+                    text=f"Сіздің хабарламаңыз: '{recognized_text_original}', жауап күтіңіз..."
                 )
                 messages_to_delete.append(delete_message_kz.message_id)
             else:
                 delete_message_ru = await message.answer(
-                    text=f"Вы произнесли: '{recognized_text_original}', ожидайте ответа..."
+                    text=f"Ваше сообщение: '{recognized_text_original}', ожидайте ответа..."
                 )
                 messages_to_delete.append(delete_message_ru.message_id)
                 recognized_text = recognized_text_original
@@ -181,7 +193,9 @@ async def handle_voice_message(
             )
         except Exception as e:
             logger.error(f"Failed to send voice response: {e}")
-            await message.answer("Не удалось отправить голосовой ответ.")
+            await message.answer(
+                "Не удалось отправить голосовой ответ. Попробуйте позже."
+            )
         finally:
             if os.path.exists(mp3_audio_path):
                 os.remove(mp3_audio_path)
@@ -310,83 +324,13 @@ async def handle_voice_message(
                                     logger.info(
                                         f"pain_intensity: {response_data['pain_intensity']}"
                                     )
-                                current_date = (
-                                    get_current_time_in_almaty_naive().date()
+                                selected_date = data.get(
+                                    "selected_date",
+                                    get_current_time_in_almaty_naive().date(),
                                 )
-                                existing_survey = (
-                                    await database.get_entity_parameter(
-                                        model_class=Survey,
-                                        filters={
-                                            "userid": response_data["userid"],
-                                            "created_at": current_date,
-                                        },
-                                    )
+                                await save_survey_response(
+                                    database, response_data, selected_date
                                 )
-
-                                if existing_survey:
-                                    # Обновление существующей записи
-                                    try:
-                                        for (
-                                            parameter,
-                                            value,
-                                        ) in response_data.items():
-                                            if (
-                                                parameter != "userid"
-                                            ):  # userid не нужно обновлять
-                                                await database.update_entity_parameter(
-                                                    entity_id=(
-                                                        existing_survey.survey_id,
-                                                        existing_survey.userid,
-                                                    ),  # используем составной ключ
-                                                    parameter=parameter,
-                                                    value=value,
-                                                    model_class=Survey,
-                                                )
-                                        logger.info(
-                                            "Updated existing survey successfully"
-                                        )
-                                    except Exception as e:
-                                        logger.error(
-                                            f"Error updating existing survey: {e}"
-                                        )
-                                else:
-                                    # Добавление новой записи
-                                    try:
-                                        survey_data = Survey(
-                                            userid=response_data["userid"],
-                                            headache_today=response_data[
-                                                "headache_today"
-                                            ],
-                                            medicament_today=response_data[
-                                                "medicament_today"
-                                            ],
-                                            pain_intensity=response_data[
-                                                "pain_intensity"
-                                            ],
-                                            pain_area=response_data[
-                                                "pain_area"
-                                            ],
-                                            area_detail=response_data[
-                                                "area_detail"
-                                            ],
-                                            pain_type=response_data[
-                                                "pain_type"
-                                            ],
-                                            comments=response_data["comments"],
-                                            created_at=current_date,
-                                            updated_at=current_date,
-                                        )
-                                        await database.add_entity(
-                                            entity_data=survey_data,
-                                            model_class=Survey,
-                                        )
-                                        logger.info(
-                                            "Added new survey successfully"
-                                        )
-                                    except Exception as e:
-                                        logger.error(
-                                            f"Error adding new survey: {e}"
-                                        )
 
                             except Exception as e:
                                 logger.error(

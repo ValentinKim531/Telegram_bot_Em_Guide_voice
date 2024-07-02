@@ -93,7 +93,7 @@ async def process_set_time(
         await reminder_manager.schedule_reminder(user_id, reminder_time)
 
         await message.answer(
-            "Время напоминания установлено.\n До скорой встрачи!"
+            "Время напоминания установлено.\n До скорой встречи!"
         )
     except ValueError as e:
         logger.error(f"Error parsing reminder_time: {e}")
