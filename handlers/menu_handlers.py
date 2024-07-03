@@ -23,6 +23,7 @@ from services.save_survey_response import (
     get_calendar_marks,
     generate_calendar_markup,
     get_survey_by_date,
+    get_surveys_for_month,
 )
 from utils.datetime_utils import get_current_time_in_almaty_naive
 
@@ -86,7 +87,9 @@ async def show_calendar(
     marks = await get_calendar_marks(database, user_id, month, year)
     calendar_markup = generate_calendar_markup(month, year, marks)
 
-    await message.answer("Ваш дневник", reply_markup=calendar_markup)
+    diary_title = "Ваш дневник\n\nЕсли в календаре уже есть запись, то значок покажет, была ли боль\n🔸 - боль без лекарств\n🔺 - головная боль и лекарства\n✓ - запись об отсутствии головной боли"
+
+    await message.answer(diary_title, reply_markup=calendar_markup)
     await state.update_data(calendar_date=current_date, calendar_marks=marks)
 
 
@@ -138,6 +141,7 @@ async def process_date_selection(
 ):
     user_id = callback_query.from_user.id
     date_str = callback_query.data.split("_")[1]
+
     selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
 
     survey = await get_survey_by_date(database, user_id, selected_date)
@@ -154,7 +158,7 @@ async def process_date_selection(
     else:
         response_text = (
             f"Дата: {selected_date}\n"
-            f"Записи отсутствуют. Нажмите кнопку ниже, чтобы добавить запись."
+            f"Запись отсутствует. Нажмите кнопку ниже, чтобы добавить запись."
         )
         button_text = f"Добавить запись на {selected_date}"
 
@@ -164,13 +168,50 @@ async def process_date_selection(
                 InlineKeyboardButton(
                     text=button_text, callback_data=f"add_{date_str}"
                 )
-            ]
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Назад ↩️", callback_data="back_to_calendar"
+                )
+            ],
         ]
+    )
+    # Сохраняем выбранную дату и текущий месяц, год в состоянии
+    await state.update_data(
+        selected_date=selected_date,
+        selected_month=selected_date.month,
+        selected_year=selected_date.year,
     )
     await callback_query.message.edit_text(
         response_text, reply_markup=inline_kb
     )
-    await state.update_data(selected_date=selected_date)
+
+
+@router.callback_query(lambda c: c.data == "back_to_calendar")
+async def back_to_calendar(
+    callback_query: CallbackQuery, state: FSMContext, database: Database
+):
+    data = await state.get_data()
+    selected_month = data.get("selected_month")
+    selected_year = data.get("selected_year")
+
+    if not selected_month or not selected_year:
+        now = datetime.now()
+        selected_month = now.month
+        selected_year = now.year
+
+    marks = await get_calendar_marks(
+        database, callback_query.from_user.id, selected_month, selected_year
+    )
+
+    markup = generate_calendar_markup(selected_month, selected_year, marks)
+
+    diary_title = "Ваш дневник\n\nЕсли в календаре уже есть запись, то значок покажет, была ли боль\n🔸 - боль без лекарств\n🔺 - головная боль и лекарства\n✓ - запись об отсутствии головной боли"
+
+    await callback_query.message.edit_text(diary_title, reply_markup=markup)
+    await state.update_data(
+        selected_month=selected_month, selected_year=selected_year
+    )
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("add_"))

@@ -54,16 +54,17 @@ async def save_survey_response(database, response_data, selected_date):
             logger.error(f"Error adding new survey: {e}")
 
 
-async def get_survey_by_date(database, user_id, date):
+async def get_survey_by_date(database, user_id, date: datetime.date):
     filters = {"userid": user_id, "created_at": date}
     survey = await database.get_entity_parameter(
         model_class=Survey, filters=filters
     )
+
     return survey
 
 
 async def get_surveys_for_month(
-    database: Postgres, user_id: int, month: int, year: int
+    database: Database, user_id: int, month: int, year: int
 ) -> list:
     try:
         async with database.Session() as session:
@@ -83,17 +84,19 @@ async def get_surveys_for_month(
 
 
 async def get_calendar_marks(
-    database: Postgres, user_id: int, month: int, year: int
+    database: Database, user_id: int, month: int, year: int
 ) -> dict:
     surveys = await get_surveys_for_month(database, user_id, month, year)
     marks = {}
     for survey in surveys:
         date_str = survey.created_at.strftime("%Y-%m-%d")
-        if survey.headache_today.lower() == "да":
+        if "да" in survey.headache_today.lower():
             if survey.medicament_today:
                 marks[date_str] = "🔺"
             else:
                 marks[date_str] = "🔸"
+        elif "нет" in survey.headache_today.lower():
+            marks[date_str] = "✓"
     return marks
 
 
@@ -101,6 +104,31 @@ def generate_calendar_markup(
     month: int, year: int, marks: dict
 ) -> InlineKeyboardMarkup:
     keyboard = []
+
+    # Добавляем кнопку с текущим месяцем и годом на русском языке
+    months_ru = [
+        "",
+        "Январь",
+        "Февраль",
+        "Март",
+        "Апрель",
+        "Май",
+        "Июнь",
+        "Июль",
+        "Август",
+        "Сентябрь",
+        "Октябрь",
+        "Ноябрь",
+        "Декабрь",
+    ]
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                text=f"{months_ru[month]} {year}", callback_data="ignore"
+            )
+        ]
+    )
+
     # Добавим дни недели
     keyboard.append(
         [
@@ -111,10 +139,11 @@ def generate_calendar_markup(
 
     # Генерация дней месяца
     month_calendar = calendar.monthcalendar(year, month)
+    today = datetime.today().date()
     for week in month_calendar:
         row = []
         for day in week:
-            if day == 0:
+            if day == 0 or datetime(year, month, day).date() > today:
                 row.append(
                     InlineKeyboardButton(text=" ", callback_data="ignore")
                 )
@@ -128,13 +157,15 @@ def generate_calendar_markup(
                         text=text, callback_data=f"date_{date_str}"
                     )
                 )
-        keyboard.append(row)
+        # Удаляем пустые строки, если они идут после сегодняшнего дня
+        if any(button.text.strip() for button in row):
+            keyboard.append(row)
 
     # Кнопки для переключения месяцев
     keyboard.append(
         [
-            InlineKeyboardButton(text="<", callback_data="prev_month"),
-            InlineKeyboardButton(text=">", callback_data="next_month"),
+            InlineKeyboardButton(text="⬅️", callback_data="prev_month"),
+            InlineKeyboardButton(text="➡️", callback_data="next_month"),
         ]
     )
 
