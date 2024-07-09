@@ -2,8 +2,9 @@ FROM python:3.10.2
 
 WORKDIR /app
 
-COPY pyproject.toml poetry.lock ./
+COPY pyproject.toml .
 
+# Обновление и установка ffmpeg
 RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y ffmpeg && \
