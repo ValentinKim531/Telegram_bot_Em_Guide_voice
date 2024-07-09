@@ -4,9 +4,8 @@ from datetime import datetime
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from dateutil.relativedelta import relativedelta
 from sqlalchemy import select
-from services.database import Survey, Postgres, Database
+from services.database import Survey, Database
 from utils.datetime_utils import get_current_time_in_almaty_naive
-from collections import Counter
 
 logger = logging.getLogger(__name__)
 
