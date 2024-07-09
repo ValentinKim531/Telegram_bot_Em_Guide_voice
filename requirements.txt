@@ -10,7 +10,6 @@ asyncpg==0.29.0
 attrs==23.2.0
 black==24.4.2
 certifi==2024.2.2
-chardet==4.0.0
 charset-normalizer==3.3.2
 click==8.1.7
 dataclasses==0.6
