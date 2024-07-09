@@ -2,17 +2,15 @@ FROM python:3.10.2
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY pyproject.toml poetry.lock ./
 
-# Обновление и установка ffmpeg
 RUN apt-get update && \
     apt-get upgrade -y && \
-    apt-get install -y ffmpeg
-
-RUN python -m venv /app/venv && \
-    /app/venv/bin/pip install --upgrade pip && \
-    /app/venv/bin/pip install -r requirements.txt
+    apt-get install -y ffmpeg && \
+    pip install poetry && \
+    poetry config virtualenvs.create false && \
+    poetry install --no-interaction --no-ansi
 
 COPY . .
 
-CMD ["/app/venv/bin/python", "main.py"]
+CMD ["python", "main.py"]
