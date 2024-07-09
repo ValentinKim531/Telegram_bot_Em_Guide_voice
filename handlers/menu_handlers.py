@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-
+from collections import Counter
 from aiogram import Router, F
 from aiogram.types import (
     InlineKeyboardButton,
@@ -23,7 +23,6 @@ from services.save_survey_response import (
     get_calendar_marks,
     generate_calendar_markup,
     get_survey_by_date,
-    get_surveys_for_month,
 )
 from utils.datetime_utils import get_current_time_in_almaty_naive
 
@@ -75,6 +74,48 @@ async def menu_command_headache(
         )
 
 
+async def generate_diary_title(marks):
+    if not marks:
+        return "Записей в этом месяце нет."
+
+    counter = Counter(marks.get("headache_medicament_today", []))
+    medicament_output = "\n".join(
+        f"{medicament.title()} - {count}"
+        for medicament, count in counter.items()
+    )
+
+    diary_title = (
+        f"Ваш дневник\n\nЕсли в календаре уже есть запись, то значок покажет, была ли боль\n"
+        "🔸 - боль без лекарств\n"
+        "🔺 - головная боль и лекарства"
+        "\n✓ - запись об отсутствии головной боли\n\n"
+    )
+
+    if marks.get("count_headache"):
+        diary_title += f"Дней с головной болью: {marks['count_headache']}\n\n"
+    else:
+        diary_title += f"🗒 Записей в этом месяце нет"
+    if marks.get("count_headache_medicament_today"):
+        diary_title += f"Дней, когда вы принимали обезболивающее: {marks['count_headache_medicament_today']}\n\n"
+    if medicament_output:
+        diary_title += f"Вы принимали обезболивающие:\n{medicament_output} "
+
+    return diary_title
+
+
+async def edit_message_if_needed(callback_query, new_text, new_markup):
+    try:
+        current_message = callback_query.message
+        if (current_message.text != new_text) or (
+            current_message.reply_markup != new_markup
+        ):
+            await callback_query.message.edit_text(
+                new_text, reply_markup=new_markup
+            )
+    except Exception as e:
+        print(f"Failed to edit message: {e}")
+
+
 @router.message(F.text.in_("/calendar"))
 async def show_calendar(
     message: Message, state: FSMContext, database: Database
@@ -86,53 +127,46 @@ async def show_calendar(
 
     marks = await get_calendar_marks(database, user_id, month, year)
     calendar_markup = generate_calendar_markup(month, year, marks)
-
-    diary_title = "Ваш дневник\n\nЕсли в календаре уже есть запись, то значок покажет, была ли боль\n🔸 - боль без лекарств\n🔺 - головная боль и лекарства\n✓ - запись об отсутствии головной боли"
+    diary_title = await generate_diary_title(marks)
 
     await message.answer(diary_title, reply_markup=calendar_markup)
     await state.update_data(calendar_date=current_date, calendar_marks=marks)
+
+
+async def handle_month_change(
+    callback_query: CallbackQuery,
+    state: FSMContext,
+    database: Database,
+    months_delta: int,
+):
+    data = await state.get_data()
+    calendar_date = data.get("calendar_date")
+    new_date = calendar_date + relativedelta(months=months_delta)
+
+    marks = await get_calendar_marks(
+        database, callback_query.from_user.id, new_date.month, new_date.year
+    )
+    calendar_markup = generate_calendar_markup(
+        new_date.month, new_date.year, marks
+    )
+    diary_title = await generate_diary_title(marks)
+
+    await edit_message_if_needed(callback_query, diary_title, calendar_markup)
+    await state.update_data(calendar_date=new_date, calendar_marks=marks)
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("prev_month"))
 async def prev_month(
     callback_query: CallbackQuery, state: FSMContext, database: Database
 ):
-    data = await state.get_data()
-    calendar_date = data.get("calendar_date")
-    prev_date = calendar_date - relativedelta(months=1)
-
-    marks = await get_calendar_marks(
-        database, callback_query.from_user.id, prev_date.month, prev_date.year
-    )
-    calendar_markup = generate_calendar_markup(
-        prev_date.month, prev_date.year, marks
-    )
-
-    await callback_query.message.edit_reply_markup(
-        reply_markup=calendar_markup
-    )
-    await state.update_data(calendar_date=prev_date, calendar_marks=marks)
+    await handle_month_change(callback_query, state, database, -1)
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("next_month"))
 async def next_month(
     callback_query: CallbackQuery, state: FSMContext, database: Database
 ):
-    data = await state.get_data()
-    calendar_date = data.get("calendar_date")
-    next_date = calendar_date + relativedelta(months=1)
-
-    marks = await get_calendar_marks(
-        database, callback_query.from_user.id, next_date.month, next_date.year
-    )
-    calendar_markup = generate_calendar_markup(
-        next_date.month, next_date.year, marks
-    )
-
-    await callback_query.message.edit_reply_markup(
-        reply_markup=calendar_markup
-    )
-    await state.update_data(calendar_date=next_date, calendar_marks=marks)
+    await handle_month_change(callback_query, state, database, 1)
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("date_"))
@@ -141,9 +175,8 @@ async def process_date_selection(
 ):
     user_id = callback_query.from_user.id
     date_str = callback_query.data.split("_")[1]
-
     selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-
+    print(f"selected_date: {selected_date}")
     survey = await get_survey_by_date(database, user_id, selected_date)
 
     if survey:
@@ -176,15 +209,12 @@ async def process_date_selection(
             ],
         ]
     )
-    # Сохраняем выбранную дату и текущий месяц, год в состоянии
     await state.update_data(
         selected_date=selected_date,
         selected_month=selected_date.month,
         selected_year=selected_date.year,
     )
-    await callback_query.message.edit_text(
-        response_text, reply_markup=inline_kb
-    )
+    await edit_message_if_needed(callback_query, response_text, inline_kb)
 
 
 @router.callback_query(lambda c: c.data == "back_to_calendar")
@@ -203,12 +233,10 @@ async def back_to_calendar(
     marks = await get_calendar_marks(
         database, callback_query.from_user.id, selected_month, selected_year
     )
-
     markup = generate_calendar_markup(selected_month, selected_year, marks)
+    diary_title = await generate_diary_title(marks)
 
-    diary_title = "Ваш дневник\n\nЕсли в календаре уже есть запись, то значок покажет, была ли боль\n🔸 - боль без лекарств\n🔺 - головная боль и лекарства\n✓ - запись об отсутствии головной боли"
-
-    await callback_query.message.edit_text(diary_title, reply_markup=markup)
+    await edit_message_if_needed(callback_query, diary_title, markup)
     await state.update_data(
         selected_month=selected_month, selected_year=selected_year
     )

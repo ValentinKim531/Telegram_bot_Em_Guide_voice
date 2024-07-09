@@ -112,6 +112,28 @@ class Postgres(Database):
             logger.error(f"Error in get_entity_parameter: {e}")
         return None
 
+    async def get_entities_parameter(
+        self, model_class: Type[Base], filters: Optional[dict] = None
+    ) -> Optional[list[Base]]:
+        """
+        Get entities from the database based on filters.
+
+        :param model_class: The class of the model corresponding to the entities.
+        :param filters: A dictionary of filters to apply.
+
+        :return: A list of entities.
+        """
+        try:
+            async with self.Session() as session:
+                if filters:
+                    stmt = select(model_class).filter_by(**filters)
+                    result = await session.execute(stmt)
+                    return result.scalars().all()
+
+        except Exception as e:
+            logger.error(f"Error in get_entities_parameter: {e}")
+        return None
+
     async def get_entities(self, model_class: type[Base]) -> Optional[list]:
         """
         Retrieve a list of entities from the database.

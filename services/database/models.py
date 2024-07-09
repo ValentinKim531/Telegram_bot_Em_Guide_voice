@@ -181,6 +181,20 @@ class Database(ABC):
         pass
 
     @abstractmethod
+    async def get_entities_parameter(
+        self, model_class: Type[Base], filters: Optional[dict] = None
+    ) -> Optional[list[Base]]:
+        """
+        Get entities from the database based on filters.
+
+        :param model_class: The class of the model corresponding to the entities.
+        :param filters: A dictionary of filters to apply.
+
+        :return: A list of entities.
+        """
+        pass
+
+    @abstractmethod
     async def get_entities(self, model_class: type[Base]) -> any:
         """
         Retrieve a list of entities from the database.
@@ -243,19 +257,3 @@ class Database(ABC):
         :return: None
         """
         pass
-
-
-class UserParams(Enum):
-    """
-    Model for user parameters.
-    """
-
-    TABLE_NAME: str = "users"
-
-    USER_ID_COL: str = "userid"
-    USER_NAME_COL: str = "username"
-    USER_FIRST_NAME_COL: str = "firstname"
-    USER_LAST_NAME_COL: str = "lastname"
-    USER_START_DATE_COL: str = "startdate"
-    USER_LANG_COL: str = "language"
-    USER_ROLE_COL: str = "role"

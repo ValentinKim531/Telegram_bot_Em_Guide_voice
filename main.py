@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from datetime import datetime
-
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from services.database import Postgres
@@ -10,6 +9,7 @@ from settings import (
     Settings,
     create_bot,
     create_dispatcher,
+    run_webhook,
 )
 from services.yandex_service import get_iam_token, refresh_iam_token
 from handlers import (
@@ -18,6 +18,7 @@ from handlers import (
     menu_handlers,
     reminder_handler,
 )
+from utils.config import WEBHOOK_URL, WEBHOOK_PATH, WEBAPP_HOST, WEBAPP_PORT
 
 # Настройки Telegram-бота
 logging.basicConfig(level=logging.INFO)
@@ -36,7 +37,11 @@ async def main():
         bot_token=TELEGRAM_BOT_TOKEN,
         storage=MemoryStorage(),
         drop_pending_updates=True,
-        database=Postgres(),
+        database=database,
+        webhook_url=WEBHOOK_URL,
+        webhook_path=WEBHOOK_PATH,
+        host=WEBAPP_HOST,
+        port=WEBAPP_PORT,
     )
     bot: Bot = create_bot(settings=settings)
 
@@ -46,16 +51,18 @@ async def main():
     dp.include_router(voice_handler.router)
     dp.include_router(menu_handlers.router)
     dp.include_router(reminder_handler.router)
-    # dp.include_router(other_handler.router)
 
     # Логирование текущего времени
     current_time = datetime.now()
     logger.info(f"Current time at bot start: {current_time}")
 
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(
-        bot,
-        skip_updates=True,
+    await run_webhook(
+        app_dispatcher=dp,
+        bot=bot,
+        webhook_url=WEBHOOK_URL,
+        webhook_path=WEBHOOK_PATH,
+        host=WEBAPP_HOST,
+        port=WEBAPP_PORT,
     )
 
 
