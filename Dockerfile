@@ -17,4 +17,4 @@ RUN python -m venv /app/venv && \
 COPY . .
 
 # Запуск приложения
-CMD ["/app/venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
