@@ -1,14 +1,18 @@
-FROM python:3.10
+FROM python:3.10.2
 
 WORKDIR /app
 
 COPY requirements.txt .
 
+# Обновление и установка ffmpeg
 RUN apt-get update && \
-    apt-get install -y ffmpeg && \
-    pip install --upgrade pip && \
-    pip install -r requirements.txt
+    apt-get upgrade -y && \
+    apt-get install -y ffmpeg
+
+RUN python -m venv /app/venv && \
+    /app/venv/bin/pip install --upgrade pip && \
+    /app/venv/bin/pip install -r requirements.txt
 
 COPY . .
 
-CMD ["python", "main.py"]
+CMD ["/app/venv/bin/python", "main.py"]
