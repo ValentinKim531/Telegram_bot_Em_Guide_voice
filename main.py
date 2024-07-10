@@ -1,6 +1,8 @@
 import asyncio
 import logging
+import os
 from datetime import datetime
+from fastapi import FastAPI
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from services.database import Postgres
@@ -24,8 +26,10 @@ from utils.config import WEBHOOK_URL, WEBHOOK_PATH, WEBAPP_HOST, WEBAPP_PORT
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+app = FastAPI()
 
-async def main():
+@app.on_event("startup")
+async def startup():
     logger.info("Starting bot")
     get_iam_token()
     task = asyncio.create_task(refresh_iam_token())
@@ -65,6 +69,6 @@ async def main():
         port=WEBAPP_PORT,
     )
 
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
