@@ -14,4 +14,4 @@ RUN apt-get update && \
 
 COPY . .
 
-CMD ["python", "main.py"]
+CMD ["poetry", "run", "python", "main.py"]
