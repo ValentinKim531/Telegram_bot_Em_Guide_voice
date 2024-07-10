@@ -15,4 +15,4 @@ RUN python -m venv /app/venv && \
 
 COPY . .
 
-CMD ["/app/venv/bin/python", "main.py"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
