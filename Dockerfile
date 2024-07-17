@@ -6,13 +6,14 @@ WORKDIR /app
 RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y ffmpeg locales && \
-    locale-gen ru_RU.UTF-8 && \
+    echo "ru_RU.UTF-8 UTF-8" > /etc/locale.gen && \
+    locale-gen && \
     update-locale LANG=ru_RU.UTF-8
 
 # Устанавливаем переменные окружения для локали
-ENV LANG ru_RU.UTF-8
-ENV LANGUAGE ru_RU:ru
-ENV LC_ALL ru_RU.UTF-8
+ENV LANG=ru_RU.UTF-8
+ENV LANGUAGE=ru_RU:ru
+ENV LC_ALL=ru_RU.UTF-8
 
 # Копируем и устанавливаем зависимости
 COPY requirements.txt .
