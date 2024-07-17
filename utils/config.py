@@ -19,3 +19,7 @@ WEBHOOK_PATH: Final[str] = os.getenv("WEBHOOK_PATH", "/webhook")
 WEBHOOK_URL: Final[str] = os.getenv("WEBHOOK_URL")
 WEBAPP_HOST: Final[str] = os.getenv("WEBAPP_HOST", "0.0.0.0")
 WEBAPP_PORT: Final[int] = int(os.getenv("PORT", "8080"))
+
+
+THROTTLING_TIME_PERIOD: Final[int] = 2
+THROTTLING_MAX_RATE: Final[int] = 1

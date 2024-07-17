@@ -5,6 +5,7 @@ from datetime import datetime
 from fastapi import FastAPI
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+from middlewares import ThrottlingMiddleware
 from services.database import Postgres
 from settings import (
     TELEGRAM_BOT_TOKEN,
@@ -27,6 +28,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
 
 @app.on_event("startup")
 async def startup():
@@ -56,6 +58,9 @@ async def startup():
     dp.include_router(menu_handlers.router)
     dp.include_router(reminder_handler.router)
 
+    dp.message.middleware(ThrottlingMiddleware())
+    dp.callback_query.middleware(ThrottlingMiddleware())
+
     # Логирование текущего времени
     current_time = datetime.now()
     logger.info(f"Current time at bot start: {current_time}")
@@ -69,6 +74,8 @@ async def startup():
         port=WEBAPP_PORT,
     )
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
