@@ -9,6 +9,10 @@ locale.setlocale(locale.LC_TIME, "ru_RU.UTF-8")
 
 
 async def generate_statistics_file(user_records, user_info, user_id):
+    # Фильтруем записи по user_id
+    user_records = [record for record in user_records if record.userid == user_id]
+    user_info = [record for record in user_info if record.userid == user_id]
+
     # Подготавливаем данные для DataFrame с записями
     data = [
         {
