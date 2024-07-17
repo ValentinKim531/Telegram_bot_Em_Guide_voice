@@ -4,7 +4,7 @@ from datetime import datetime
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from dateutil.relativedelta import relativedelta
 from sqlalchemy import select
-from services.database import Survey, Database
+from services.database import Survey, Postgres
 from utils.datetime_utils import get_current_time_in_almaty_naive
 
 logger = logging.getLogger(__name__)
@@ -75,7 +75,7 @@ async def get_survey_by_date(database, user_id, date: datetime.date):
 
 
 async def get_surveys_for_month(
-    database: Database, user_id: int, month: int, year: int
+    database: Postgres, user_id: int, month: int, year: int
 ) -> list:
     try:
         async with database.Session() as session:
@@ -95,7 +95,7 @@ async def get_surveys_for_month(
 
 
 async def get_calendar_marks(
-    database: Database, user_id: int, month: int, year: int
+    database: Postgres, user_id: int, month: int, year: int
 ) -> dict:
     surveys = await get_surveys_for_month(database, user_id, month, year)
     marks = {}

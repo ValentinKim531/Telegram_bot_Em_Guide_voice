@@ -10,6 +10,7 @@ from sqlalchemy import (
     Integer,
     func,
 )
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
     AsyncSession,
@@ -37,14 +38,19 @@ class Postgres(Database):
         try:
             self.engine = create_async_engine(
                 f"postgresql+asyncpg://{self._DB_USER}:{self._DB_PASSWORD}"
-                f"@{self._DB_HOST}:{self._DB_PORT}/{self._DB_NAME}"
+                f"@{self._DB_HOST}:{self._DB_PORT}/{self._DB_NAME}",
+                pool_size=10,  # Установите размер пула соединений
+                max_overflow=20,  # Установите максимальное количество соединений
+                pool_timeout=30,  # Установите время ожидания в секундах
+                pool_recycle=1800,  # Установите время переработки соединений в секундах
+                pool_pre_ping=True  # Включите pre-ping для проверки соединения
             )
             self.Session = async_sessionmaker(
                 bind=self.engine, expire_on_commit=False, class_=AsyncSession
             )
-
+            logger.info("Database engine and session initialized successfully")
         except Exception as e:
-            print("class <Postgres> connection error:", e)
+            logger.error(f"Class <Postgres> connection error: {e}")
 
     async def create_tables(self) -> None:
         """
@@ -108,6 +114,8 @@ class Postgres(Database):
                         return getattr(entity, parameter, None)
                     return entity
 
+        except SQLAlchemyError as e:
+            logger.error(f"SQLAlchemy error in get_entity_parameter: {e}")
         except Exception as e:
             logger.error(f"Error in get_entity_parameter: {e}")
         return None
@@ -130,6 +138,8 @@ class Postgres(Database):
                     result = await session.execute(stmt)
                     return result.scalars().all()
 
+        except SQLAlchemyError as e:
+            logger.error(f"SQLAlchemy error in get_entities_parameter: {e}")
         except Exception as e:
             logger.error(f"Error in get_entities_parameter: {e}")
         return None
@@ -146,6 +156,9 @@ class Postgres(Database):
             async with self.Session() as session:
                 entities = await session.execute(select(model_class))
                 return entities.scalars().all()
+
+        except SQLAlchemyError as e:
+            logger.error(f"SQLAlchemy error in get_entities: {e}")
         except Exception as e:
             print(f"class <Postgres> get_entities error:", e)
             return None
@@ -177,6 +190,9 @@ class Postgres(Database):
                 if entity:
                     setattr(entity, parameter, value)
                     await session.commit()
+
+        except SQLAlchemyError as e:
+            logger.error(f"SQLAlchemy error in update_entity_parameter: {e}")
         except Exception as e:
             print(f"class <Postgres> update_entity_parameter error: {e}")
 
@@ -197,6 +213,9 @@ class Postgres(Database):
                 if entity:
                     await session.delete(entity)
                     await session.commit()
+
+        except SQLAlchemyError as e:
+            logger.error(f"SQLAlchemy error in delete_entity: {e}")
         except Exception as e:
             print(f"class <Postgres> delete_entity error: {e}")
 
@@ -224,5 +243,8 @@ class Postgres(Database):
                 )
                 await session.execute(stmt)
                 await session.commit()
+
+        except SQLAlchemyError as e:
+            logger.error(f"SQLAlchemy error in delete_entity_parameter: {e}")
         except Exception as e:
             print(f"class <Postgres> delete_entity_parameter error: {e}")

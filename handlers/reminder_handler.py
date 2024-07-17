@@ -6,7 +6,7 @@ from aiogram.types import (
     CallbackQuery,
 )
 from aiogram.fsm.context import FSMContext
-from services.database import Database, User
+from services.database import Postgres, User
 from datetime import datetime
 import logging
 
@@ -19,17 +19,36 @@ router = Router()
 
 
 @router.message(F.text == "/settings")
-async def settings_command(message: Message, database: Database):
+async def settings_command(message: Message, state: FSMContext, database: Postgres):
+    await show_settings_menu(message, state, database)
+
+@router.callback_query(F.data == "back_to_settings")
+async def back_to_settings_handler(callback_query: CallbackQuery, state: FSMContext, database: Postgres):
+    await callback_query.message.delete()
+    await show_settings_menu(callback_query.message, state, database)
+
+async def show_settings_menu(message: Message, state: FSMContext, database: Postgres):
     reminders_button = InlineKeyboardButton(
         text="Напоминания", callback_data="reminder_settings"
     )
-    markup = InlineKeyboardMarkup(inline_keyboard=[[reminders_button]])
-
-    # Check if user exists
-    user_id = message.from_user.id
-    existing_user = await database.get_entity_parameter(
-        model_class=User, filters={"userid": user_id}
+    personal_info = InlineKeyboardButton(
+        text="Персональная информация", callback_data="personal_info"
     )
+    bot_settings = InlineKeyboardButton(
+        text="Настройки бота", callback_data="bot_settings"
+    )
+    markup = InlineKeyboardMarkup(inline_keyboard=[[reminders_button], [personal_info], [bot_settings]])
+
+    user_id = message.from_user.id
+    data = await state.get_data()
+    existing_user = data.get("existing_user")
+
+    if existing_user is None:
+        existing_user = await database.get_entity_parameter(
+            model_class=User, filters={"userid": user_id}
+        )
+        if existing_user:
+            await state.update_data(existing_user=True)
 
     if existing_user:
         await message.answer(
@@ -38,8 +57,8 @@ async def settings_command(message: Message, database: Database):
         )
     else:
         await message.answer(
-            text="Пожалуйста, сначала зарегистрируйтесь, выбрав язык."
-            "Вы можете это сделать нажав /start \nв меню ↙️"
+            text="Пожалуйста, сначала зарегистрируйтесь, выбрав язык. "
+                 "Вы можете это сделать нажав /start \nв меню ↙️"
         )
 
 
@@ -70,7 +89,7 @@ async def set_reminder_time(callback_query: CallbackQuery, state: FSMContext):
 
 @router.message(ReminderStates.set_time)
 async def process_set_time(
-    message: Message, state: FSMContext, database: Database, bot: Bot
+    message: Message, state: FSMContext, database: Postgres, bot: Bot
 ):
     try:
         reminder_time_str = message.text
@@ -111,7 +130,7 @@ async def process_set_time(
 async def disable_reminder(
     callback_query: CallbackQuery,
     state: FSMContext,
-    database: Database,
+    database: Postgres,
     bot: Bot,
 ):
     try:
@@ -135,3 +154,59 @@ async def disable_reminder(
         await callback_query.message.answer(
             "Произошла ошибка при отключении напоминания. Пожалуйста, попробуйте снова."
         )
+
+@router.callback_query(F.data == "personal_info")
+async def personal_info_handler(callback_query: CallbackQuery, state: FSMContext):
+    change_language_button = InlineKeyboardButton(
+        text="Сменить язык", callback_data="change_language"
+    )
+    back_button = InlineKeyboardButton(
+        text="Назад ↩️", callback_data="back_to_settings"
+    )
+    markup = InlineKeyboardMarkup(inline_keyboard=[[change_language_button], [back_button]])
+
+    await callback_query.message.delete()
+    await callback_query.message.answer(
+        "Здесь вы можете изменить свои персональные данные.",
+        reply_markup=markup
+    )
+
+@router.callback_query(F.data == "change_language")
+async def change_language_handler(callback_query: CallbackQuery):
+    rus_button = InlineKeyboardButton(
+        text="Русский", callback_data="set_lang_from_menu_ru"
+    )
+    kaz_button = InlineKeyboardButton(
+        text="Қазақ", callback_data="set_lang_from_menu_kk"
+    )
+    back_button = InlineKeyboardButton(
+        text="Назад ↩️", callback_data="personal_info"
+    )
+    markup = InlineKeyboardMarkup(inline_keyboard=[[rus_button], [kaz_button], [back_button]])
+
+    await callback_query.message.delete()
+    await callback_query.message.answer(
+        "Пожалуйста, выберите язык общения с ботом.",
+        reply_markup=markup
+    )
+
+@router.callback_query(F.data.in_({"set_lang_from_menu_ru", "set_lang_from_menu_kk"}))
+async def set_language(callback_query: CallbackQuery, state: FSMContext, database: Postgres):
+    user_id = callback_query.from_user.id
+    language = "ru" if callback_query.data == "set_lang_from_menu_ru" else "kk"
+    language_text = "Русский" if language == "ru" else "Қазақ"
+
+    try:
+        await database.update_entity_parameter(
+            entity_id=user_id,
+            parameter="language",
+            value=language,
+            model_class=User
+        )
+        await state.update_data(language=language)
+        await callback_query.message.delete()
+        await callback_query.message.answer(f"Выбран {language_text} язык.")
+    except Exception as e:
+        logger.error(f"Error updating language: {e}")
+        await callback_query.message.delete()
+        await callback_query.message.answer("Произошла ошибка при обновлении языка.")

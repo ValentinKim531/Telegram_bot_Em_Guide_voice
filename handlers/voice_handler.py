@@ -17,7 +17,7 @@ from services.yandex_service import (
 from settings import ASSISTANT2_ID, ASSISTANT_ID
 from states.states import Form
 import json
-from services.database.models import Database, User, Survey
+from services.database import Postgres, User
 from utils.datetime_utils import get_current_time_in_almaty_naive
 
 router = Router()
@@ -26,31 +26,31 @@ logger = logging.getLogger(__name__)
 
 @router.message(Form.waiting_for_voice, F.voice | F.text)
 async def handle_voice_message(
-    message: Message, state: FSMContext, bot: Bot, database: Database
+    message: Message, state: FSMContext, bot: Bot, database: Postgres
 ):
     try:
-        logger.info("Received voice message")
-        user_voice_messages_to_delete = []
-        user_voice_messages_to_delete.append(message.message_id)
+        # logger.info("Received voice message")
+        # user_voice_messages_to_delete = []
+        # user_voice_messages_to_delete.append(message.message_id)
 
         # Логирование текущего состояния
         current_state = await state.get_state()
         logger.info(f"Current state in handle_voice_message: {current_state}")
 
         # Удаление предыдущего голосового сообщения бота
-        data = await state.get_data()
-        previous_bot_voice_message_id = data.get("bot_voice_message_id")
-        if previous_bot_voice_message_id:
-            try:
-                await bot.delete_message(
-                    chat_id=message.chat.id,
-                    message_id=previous_bot_voice_message_id,
-                )
-                logger.info("Previous bot voice message deleted")
-            except Exception as e:
-                logger.error(
-                    f"Failed to delete previous bot voice message: {e}"
-                )
+        # data = await state.get_data()
+        # previous_bot_voice_message_id = data.get("bot_voice_message_id")
+        # if previous_bot_voice_message_id:
+        #     try:
+        #         await bot.delete_message(
+        #             chat_id=message.chat.id,
+        #             message_id=previous_bot_voice_message_id,
+        #         )
+        #         logger.info("Previous bot voice message deleted")
+        #     except Exception as e:
+        #         logger.error(
+        #             f"Failed to delete previous bot voice message: {e}"
+        #         )
 
         user_id = message.from_user.id
         data = await state.get_data()
@@ -107,7 +107,7 @@ async def handle_voice_message(
                 "Если вы хотите воспользоваться меню, то сначала закончите опрос или выберите язык, пожалуйста."
             )
         else:
-            messages_to_delete = []
+            # messages_to_delete = []
             if user_lang == "kk":
                 recognized_text = translate_text(
                     recognized_text_original,
@@ -119,12 +119,12 @@ async def handle_voice_message(
                 delete_message_kz = await message.answer(
                     text=f"Сіздің хабарламаңыз: '{recognized_text_original}', жауап күтіңіз..."
                 )
-                messages_to_delete.append(delete_message_kz.message_id)
+                # messages_to_delete.append(delete_message_kz.message_id)
             else:
                 delete_message_ru = await message.answer(
                     text=f"Ваше сообщение: '{recognized_text_original}', ожидайте ответа..."
                 )
-                messages_to_delete.append(delete_message_ru.message_id)
+                # messages_to_delete.append(delete_message_ru.message_id)
                 recognized_text = recognized_text_original
 
             # Получаем thread_id и тип ассистента из состояния
@@ -207,22 +207,22 @@ async def handle_voice_message(
                 os.remove("voice.mp3")
                 logger.info("File voice.mp3 deleted")
 
-            try:
-                for message_id in user_voice_messages_to_delete:
-                    await bot.delete_message(
-                        chat_id=message.chat.id, message_id=message_id
-                    )
-                logger.info("User voice messages deleted")
-            except Exception as e:
-                logger.error(f"Failed to delete user voice message: {e}")
+            # try:
+            #     for message_id in user_voice_messages_to_delete:
+            #         await bot.delete_message(
+            #             chat_id=message.chat.id, message_id=message_id
+            #         )
+            #     logger.info("User voice messages deleted")
+            # except Exception as e:
+            #     logger.error(f"Failed to delete user voice message: {e}")
 
-            try:
-                for message_id in messages_to_delete:
-                    await bot.delete_message(
-                        chat_id=message.chat.id, message_id=message_id
-                    )
-            except Exception as e:
-                logger.error(f"Failed to delete message: {e}")
+            # try:
+            #     for message_id in messages_to_delete:
+            #         await bot.delete_message(
+            #             chat_id=message.chat.id, message_id=message_id
+            #         )
+            # except Exception as e:
+            #     logger.error(f"Failed to delete message: {e}")
 
         # Сохранение ответов в базу данных
         final_response_json = None

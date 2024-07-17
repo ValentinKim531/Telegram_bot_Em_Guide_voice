@@ -1,5 +1,7 @@
 import json
 import os
+import uuid
+
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from dotenv import load_dotenv
@@ -11,6 +13,8 @@ from aiohttp import web
 from aiogram.types import Update
 from supabase import create_client, Client
 import logging
+from datetime import datetime
+from hashlib import md5
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -78,10 +82,20 @@ async def on_shutdown(app):
     await bot.session.close()
 
 
-async def save_message_to_supabase(user_id: int, message: dict):
+
+def generate_uuid_from_user_id(user_id):
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, str(user_id)))
+
+
+async def save_message_to_supabase(user_id: int, message: dict, is_created_by_user: bool):
     response = (
-        supabase.table("user_messages")
-        .insert({"user_id": user_id, "message": json.dumps(message)})
+        supabase.table("messages")
+        .insert({
+            "user_id": generate_uuid_from_user_id(user_id),  # Преобразование user_id в UUID
+            "content": json.dumps(message, ensure_ascii=False),  # Кодировка UTF-8 для правильного отображения символов
+            "created_at": datetime.utcnow().isoformat(),  # Используем строку ISO формата
+            "is_created_by_user": is_created_by_user
+        })
         .execute()
     )
     if "error" in response:
@@ -113,10 +127,80 @@ async def run_webhook(
         bot = app["bot"]
         update_dict = await request.json()
         update = Update(**update_dict)
+        logger.info(f"Received update: {update_dict}")
         await app["dispatcher"].feed_update(bot, update)
 
         if update.message:
             user_id = update.message.from_user.id
+            message_content = {}
+
+            if update.message.text:
+                message_content["text"] = update.message.text
+            if update.message.photo:
+                largest_photo = update.message.photo[-1]
+                photo_url = await get_file_url(bot, largest_photo.file_id)
+                message_content["photo"] = [photo_url]
+            if update.message.voice:
+                voice_url = await get_file_url(
+                    bot, update.message.voice.file_id
+                )
+                message_content["voice"] = voice_url
+            if update.message.document:
+                print(f"Document detected: {update.message.document.file_id}")
+                url = await get_file_url(bot, update.message.document.file_id)
+                if url:
+                    message_content["other_content"] = url
+                    print(f"Document URL added: {url}")
+                else:
+                    print("Document URL is empty or could not be retrieved.")
+            else:
+                print("No other_content found in the message.")
+
+            print(f"Message Content: {message_content}")
+
+            await save_message_to_supabase(user_id, message_content, is_created_by_user=True)
+
+        if update.edited_message:
+            user_id = update.edited_message.from_user.id
+            message_content = {}
+
+            if update.edited_message.text:
+                message_content["text"] = update.edited_message.text
+            if update.edited_message.photo:
+                largest_photo = update.message.photo[-1]
+                photo_url = await get_file_url(bot, largest_photo.file_id)
+                message_content["photo"] = [photo_url]
+            if update.edited_message.voice:
+                voice_url = await get_file_url(
+                    bot, update.edited_message.voice.file_id
+                )
+                message_content["voice"] = voice_url
+            if update.message.document:
+                print(f"Document detected: {update.message.document.file_id}")
+                url = await get_file_url(bot, update.message.document.file_id)
+                if url:
+                    message_content["other_content"] = url
+                    print(f"Document URL added: {url}")
+                else:
+                    print("Document URL is empty or could not be retrieved.")
+            else:
+                print("No other_content found in the message.")
+
+            print(f"Message Content: {message_content}")
+
+            await save_message_to_supabase(user_id, message_content, is_created_by_user=True)
+
+        if update.callback_query:
+            user_id = update.callback_query.from_user.id
+            message_content = {
+                "callback_query": update.callback_query.data
+            }
+
+            await save_message_to_supabase(user_id, message_content, is_created_by_user=True)
+
+        if update.message and update.message.from_user.is_bot:
+            logger.info(f"Message from bot: {update.message}")
+            bot_id = update.message.from_user.id
             message_content = {}
 
             if update.message.text:
@@ -138,7 +222,7 @@ async def run_webhook(
                 )
                 message_content["video"] = video_url
 
-            await save_message_to_supabase(user_id, message_content)
+            await save_message_to_supabase(bot_id, message_content, is_created_by_user=False)
 
         return web.Response(text="OK")
 

@@ -13,7 +13,7 @@ from aiogram.fsm.context import FSMContext
 from services.openai_service import process_question, get_new_thread_id
 
 from services.yandex_service import translate_text, synthesize_speech
-from services.database.models import User, Database
+from services.database import User, Postgres
 from settings import ASSISTANT_ID, ASSISTANT2_ID
 from states.states import Form
 from utils.datetime_utils import get_current_time_in_almaty_naive
@@ -26,7 +26,7 @@ router = Router()
 
 @router.message(CommandStart())
 async def process_start_command(
-    message: Message, state: FSMContext, database: Database
+    message: Message, state: FSMContext, database: Postgres
 ):
     """Send a message when the command /start is issued."""
 
@@ -73,7 +73,7 @@ async def process_start_command(
 async def set_language(
     callback_query: CallbackQuery,
     state: FSMContext,
-    database: Database,
+    database: Postgres,
     bot: Bot,
 ):
     """Handle language selection."""
@@ -142,19 +142,19 @@ async def set_language(
         )
 
     # Удаляем все сообщения
-    try:
-        for message_id in messages_to_delete:
-            await bot.delete_message(
-                chat_id=callback_query.message.chat.id, message_id=message_id
-            )
-    except Exception as e:
-        logger.error(f"Failed to delete message: {e}")
+    # try:
+    #     for message_id in messages_to_delete:
+    #         await bot.delete_message(
+    #             chat_id=callback_query.message.chat.id, message_id=message_id
+    #         )
+    # except Exception as e:
+    #     logger.error(f"Failed to delete message: {e}")
 
 
 async def process_registration(
     message: Message,
     state: FSMContext,
-    database: Database,
+    database: Postgres,
     user_id: int,
     username: str,
     first_name: str,
@@ -165,13 +165,13 @@ async def process_registration(
     logger.info("Processing registration questions")
 
     # Удаляем сообщение, если его идентификатор передан
-    if message_id:
-        try:
-            await bot.delete_message(
-                chat_id=message.chat.id, message_id=message_id
-            )
-        except Exception as e:
-            logger.error(f"Failed to delete message: {e}")
+    # if message_id:
+    #     try:
+    #         await bot.delete_message(
+    #             chat_id=message.chat.id, message_id=message_id
+    #         )
+    #     except Exception as e:
+    #         logger.error(f"Failed to delete message: {e}")
 
     data = await state.get_data()
     user_lang = data.get("language", "ru")
@@ -256,13 +256,13 @@ async def start_survey(
     logger.info("Starting survey questions")
 
     # Удаляем сообщение, если его идентификатор передан
-    if message_id:
-        try:
-            await bot.delete_message(
-                chat_id=message.chat.id, message_id=message_id
-            )
-        except Exception as e:
-            logger.error(f"Failed to delete message: {e}")
+    # if message_id:
+    #     try:
+    #         await bot.delete_message(
+    #             chat_id=message.chat.id, message_id=message_id
+    #         )
+    #     except Exception as e:
+    #         logger.error(f"Failed to delete message: {e}")
 
     data = await state.get_data()
     user_lang = data.get("language", "ru")

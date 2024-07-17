@@ -6,7 +6,7 @@ authors = ["Your Name <your.email@example.com>"]
 
 [tool.poetry.dependencies]
 python = "3.10.2"
-aiogram = "^3.0"
+aiogram = "3.7.0"
 openai = "1.35.12"
 sqlalchemy = "^2.0.31"
 pytz = "^2024.1"
@@ -16,6 +16,14 @@ apscheduler = "^3.10.4"
 requests = "^2.32.3"
 pydub = "^0.25.1"
 pandas = "^2.2.2"
+python-dotenv = "^1.0.1"
+websocket-client = "1.8.0"
+fastapi = "^0.111.0"
+uvicorn = "^0.30.1"
+asyncpg = "^0.29.0"
+xlsxwriter = "^3.2.0"
+cachetools = "^5.3.3"
+openpyxl = "^3.1.5"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
