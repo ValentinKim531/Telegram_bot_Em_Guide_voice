@@ -261,6 +261,9 @@ async def add_or_update_record(
 
 @router.message(F.text.in_("/statistics"))
 async def menu_command_statistics(message: Message, database: Postgres):
+    photo_path = "static/img/statistics.jpg"
+
+
     download_statistics_button = InlineKeyboardButton(
         text="Скачать статистику", callback_data="download_statistics"
     )
@@ -274,9 +277,6 @@ async def menu_command_statistics(message: Message, database: Postgres):
     existing_user = await database.get_entity_parameter(
         model_class=User, filters={"userid": user_id}
     )
-
-    # Путь к изображению
-    photo_path = "static/img/diary.jpeg"
 
     if existing_user:
         await message.answer_photo(

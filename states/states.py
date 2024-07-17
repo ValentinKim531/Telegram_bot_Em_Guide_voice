@@ -9,3 +9,14 @@ class Form(StatesGroup):
 class ReminderStates(StatesGroup):
     set_time = State()
     disable_reminder = State()
+
+
+class PersonalSettingsStates(StatesGroup):
+    waiting_for_fullname = State()
+    set_country = State()
+    waiting_for_city = State()
+    set_medicament = State()
+
+
+
+
