@@ -276,161 +276,161 @@ async def handle_voice_message(
                         response_data = {"text": clean_response}
                     logger.info(f"Очищенный ответ: {clean_response}")
 
-                    if (
-                        "birthdate" in response_data
-                        and response_data["birthdate"] is not None
-                    ):
-                        try:
-                            birthdate_str = response_data["birthdate"]
-                            try:
-                                birthdate = datetime.strptime(
-                                    birthdate_str, "%d.%m.%Y"
-                                ).date()
-                            except ValueError:
-                                birthdate = datetime.strptime(
-                                    birthdate_str, "%d %B %Y"
-                                ).date()
-                            response_data["birthdate"] = birthdate
-                        except ValueError as e:
-                            logger.error(f"Error parsing birthdate: {e}")
-
-                    # Преобразование времени напоминания в объект time
-                    if (
-                        "reminder_time" in response_data
-                        and response_data["reminder_time"] is not None
-                    ):
-                        try:
-                            reminder_time_str = response_data["reminder_time"]
-                            reminder_time = datetime.strptime(
-                                reminder_time_str, "%H:%M"
-                            ).time()
-                            response_data["reminder_time"] = reminder_time
-                            logger.info(
-                                f"Converted reminder_time: {reminder_time}"
-                            )
-
-                            reminder_manager = ReminderManager(
-                                database, bot, state
-                            )
-                            await reminder_manager.schedule_reminder(
-                                user_id, reminder_time
-                            )
-
-                        except ValueError as e:
-                            logger.error(f"Error parsing reminder_time: {e}")
-
-                    # Преобразование пустых строк в None или значения по умолчанию
-                    for key in response_data:
-                        if response_data[key] == "":
-                            response_data[key] = None
-
+                if (
+                    "birthdate" in response_data
+                    and response_data["birthdate"] is not None
+                ):
                     try:
-                        if assistant_type == "registration":
-                            for parameter, value in response_data.items():
-                                try:
-                                    logger.info(
-                                        f"Updating {parameter} with value {value} for user {response_data['userid']}"
-                                    )
-                                    await database.update_entity_parameter(
-                                        entity_id=response_data["userid"],
-                                        parameter=parameter,
-                                        value=value,
-                                        model_class=User,
-                                    )
-                                    logger.info(
-                                        f"Updated {parameter} successfully"
-                                    )
-                                except Exception as e:
-                                    logger.error(
-                                        f"Error updating {parameter}: {e}"
-                                    )
+                        birthdate_str = response_data["birthdate"]
+                        try:
+                            birthdate = datetime.strptime(
+                                birthdate_str, "%d.%m.%Y"
+                            ).date()
+                        except ValueError:
+                            birthdate = datetime.strptime(
+                                birthdate_str, "%d %B %Y"
+                            ).date()
+                        response_data["birthdate"] = birthdate
+                    except ValueError as e:
+                        logger.error(f"Error parsing birthdate: {e}")
 
-                        else:
+                # Преобразование времени напоминания в объект time
+                if (
+                    "reminder_time" in response_data
+                    and response_data["reminder_time"] is not None
+                ):
+                    try:
+                        reminder_time_str = response_data["reminder_time"]
+                        reminder_time = datetime.strptime(
+                            reminder_time_str, "%H:%M"
+                        ).time()
+                        response_data["reminder_time"] = reminder_time
+                        logger.info(
+                            f"Converted reminder_time: {reminder_time}"
+                        )
+
+                        reminder_manager = ReminderManager(
+                            database, bot, state
+                        )
+                        await reminder_manager.schedule_reminder(
+                            user_id, reminder_time
+                        )
+
+                    except ValueError as e:
+                        logger.error(f"Error parsing reminder_time: {e}")
+
+                # Преобразование пустых строк в None или значения по умолчанию
+                for key in response_data:
+                    if response_data[key] == "":
+                        response_data[key] = None
+
+                try:
+                    if assistant_type == "registration":
+                        for parameter, value in response_data.items():
                             try:
-                                if response_data["pain_intensity"] is not None:
-                                    response_data["pain_intensity"] = int(
-                                        response_data["pain_intensity"]
-                                    )
-                                else:
-                                    response_data["pain_intensity"] = 0
-                                    logger.info(
-                                        f"pain_intensity: {response_data['pain_intensity']}"
-                                    )
-                                selected_date = data.get(
-                                    "selected_date",
-                                    get_current_time_in_almaty_naive().date(),
+                                logger.info(
+                                    f"Updating {parameter} with value {value} for user {response_data['userid']}"
                                 )
-                                await save_survey_response(
-                                    database, response_data, selected_date
+                                await database.update_entity_parameter(
+                                    entity_id=response_data["userid"],
+                                    parameter=parameter,
+                                    value=value,
+                                    model_class=User,
                                 )
-
+                                logger.info(
+                                    f"Updated {parameter} successfully"
+                                )
                             except Exception as e:
                                 logger.error(
-                                    f"Error adding or updading response to database: {e}"
+                                    f"Error updating {parameter}: {e}"
                                 )
 
-                    except Exception as e:
-                        logger.error(f"Error saving response to database: {e}")
-
-                    # Проверка завершения блока регистрации
-                    if assistant_type == "registration":
-                        await state.update_data(assistant_type="headache")
-                        logger.info(
-                            "Registration completed. Switching to headache questions."
-                        )
-
-                        await state.set_state(Form.waiting_for_voice)
-
-                        # Отправка вопроса "Здравствуйте" второму ассистенту
-                        new_thread_id = await get_new_thread_id()
-                        response_text, new_thread_id, full_response = (
-                            await process_question(
-                                "Здравствуйте", new_thread_id, ASSISTANT_ID
-                            )
-                        )
-                        logger.info(
-                            f"Response from GPT (headache): {response_text}, new thread_id: {new_thread_id}, full_response: {full_response}"
-                        )
-                        await state.update_data(thread_id=new_thread_id)
-
-                        if user_lang == "kk":
-                            response_text = translate_text(
-                                response_text,
-                                source_lang="ru",
-                                target_lang="kk",
-                            )
-
-                        # Преобразование текстового ответа в аудио с использованием TTS API
-                        audio_response_bytes = synthesize_speech(
-                            response_text, lang_code=user_lang
-                        )
-                        logger.info("Generated speech audio for headache")
-
-                        mp3_audio_path = "response_headache.mp3"
-                        with open(mp3_audio_path, "wb") as mp3_audio_file:
-                            mp3_audio_file.write(audio_response_bytes)
-
+                    else:
                         try:
-                            await message.answer_voice(
-                                voice=FSInputFile(mp3_audio_path),
-                                caption=response_text,
+                            if response_data["pain_intensity"] is not None:
+                                response_data["pain_intensity"] = int(
+                                    response_data["pain_intensity"]
+                                )
+                            else:
+                                response_data["pain_intensity"] = 0
+                                logger.info(
+                                    f"pain_intensity: {response_data['pain_intensity']}"
+                                )
+                            selected_date = data.get(
+                                "selected_date",
+                                get_current_time_in_almaty_naive().date(),
                             )
-                            logger.info(
-                                "Voice response for headache successfully sent"
+                            await save_survey_response(
+                                database, response_data, selected_date
                             )
+
                         except Exception as e:
                             logger.error(
-                                f"Failed to send voice response for headache: {e}"
+                                f"Error adding or updading response to database: {e}"
                             )
-                            await message.answer(
-                                "Не удалось отправить голосовой ответ."
-                            )
-                        finally:
-                            if os.path.exists(mp3_audio_path):
-                                os.remove(mp3_audio_path)
-                                logger.info(f"File {mp3_audio_path} deleted")
-                    else:
-                        logger.error("It was not registration, but survey")
+
+                except Exception as e:
+                    logger.error(f"Error saving response to database: {e}")
+
+                # Проверка завершения блока регистрации
+                if assistant_type == "registration":
+                    await state.update_data(assistant_type="headache")
+                    logger.info(
+                        "Registration completed. Switching to headache questions."
+                    )
+
+                    await state.set_state(Form.waiting_for_voice)
+
+                    # Отправка вопроса "Здравствуйте" второму ассистенту
+                    new_thread_id = await get_new_thread_id()
+                    response_text, new_thread_id, full_response = (
+                        await process_question(
+                            "Здравствуйте", new_thread_id, ASSISTANT_ID
+                        )
+                    )
+                    logger.info(
+                        f"Response from GPT (headache): {response_text}, new thread_id: {new_thread_id}, full_response: {full_response}"
+                    )
+                    await state.update_data(thread_id=new_thread_id)
+
+                    if user_lang == "kk":
+                        response_text = translate_text(
+                            response_text,
+                            source_lang="ru",
+                            target_lang="kk",
+                        )
+
+                    # Преобразование текстового ответа в аудио с использованием TTS API
+                    audio_response_bytes = synthesize_speech(
+                        response_text, lang_code=user_lang
+                    )
+                    logger.info("Generated speech audio for headache")
+
+                    mp3_audio_path = "response_headache.mp3"
+                    with open(mp3_audio_path, "wb") as mp3_audio_file:
+                        mp3_audio_file.write(audio_response_bytes)
+
+                    try:
+                        await message.answer_voice(
+                            voice=FSInputFile(mp3_audio_path),
+                            caption=response_text,
+                        )
+                        logger.info(
+                            "Voice response for headache successfully sent"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to send voice response for headache: {e}"
+                        )
+                        await message.answer(
+                            "Не удалось отправить голосовой ответ."
+                        )
+                    finally:
+                        if os.path.exists(mp3_audio_path):
+                            os.remove(mp3_audio_path)
+                            logger.info(f"File {mp3_audio_path} deleted")
+                else:
+                    logger.error("It was not registration, but survey")
             except Exception as e:
                 logger.error(f"Error saving response to database: {e}")
 
