@@ -238,16 +238,43 @@ async def handle_voice_message(
                 )
                 json_start = final_response_json.find("```json")
                 json_end = final_response_json.rfind("```")
+
                 if json_start != -1 and json_end != -1:
+                    # Обработка JSON блока с тройными кавычками
                     response_data_str = final_response_json[
                         json_start + len("```json") : json_end
                     ].strip()
                     response_data = json.loads(response_data_str)
+                    logger.info(f"Parsed JSON response: {response_data}")
+                    # Обработка JSON данных
 
-                    # Добавляем userid в данные ответа
-                    response_data["userid"] = message.from_user.id
-                    logger.info(f"userid: {response_data['userid']}")
-                    logger.info(f"response_data: {response_data}")
+                else:
+                    logger.info("JSON блок не найден в ответе")
+                    # Удаление блока JSON и последующего текста, если они есть
+                    json_marker = final_response_json.find("json")
+                    if json_marker != -1:
+                        clean_response = final_response_json[
+                            :json_marker
+                        ].strip()
+                        json_start = final_response_json.find("{", json_marker)
+                        json_end = final_response_json.rfind("}")
+                        if json_start != -1 and json_end != -1:
+                            response_data_str = final_response_json[
+                                json_start : json_end + 1
+                            ].strip()
+                            response_data = json.loads(response_data_str)
+                            logger.info(
+                                f"Parsed JSON response: {response_data}"
+                            )
+                        else:
+                            logger.error(
+                                "Некорректный JSON формат после маркера 'json'"
+                            )
+                            response_data = {"text": clean_response}
+                    else:
+                        clean_response = final_response_json.strip()
+                        response_data = {"text": clean_response}
+                    logger.info(f"Очищенный ответ: {clean_response}")
 
                     if (
                         "birthdate" in response_data
@@ -255,9 +282,14 @@ async def handle_voice_message(
                     ):
                         try:
                             birthdate_str = response_data["birthdate"]
-                            birthdate = datetime.strptime(
-                                birthdate_str, "%d %B %Y"
-                            ).date()
+                            try:
+                                birthdate = datetime.strptime(
+                                    birthdate_str, "%d.%m.%Y"
+                                ).date()
+                            except ValueError:
+                                birthdate = datetime.strptime(
+                                    birthdate_str, "%d %B %Y"
+                                ).date()
                             response_data["birthdate"] = birthdate
                         except ValueError as e:
                             logger.error(f"Error parsing birthdate: {e}")
