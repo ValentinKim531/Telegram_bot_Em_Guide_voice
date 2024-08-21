@@ -19,6 +19,7 @@ from states.states import Form
 import json
 from services.database import Postgres, User
 from utils.datetime_utils import get_current_time_in_almaty_naive
+from dateutil import parser
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -281,15 +282,13 @@ async def handle_voice_message(
                     and response_data["birthdate"] is not None
                 ):
                     try:
-                        birthdate_str = response_data["birthdate"]
+                        birthdate_str = response_data["birthdate"].strip()
                         try:
                             birthdate = datetime.strptime(
                                 birthdate_str, "%d.%m.%Y"
                             ).date()
                         except ValueError:
-                            birthdate = datetime.strptime(
-                                birthdate_str, "%d %B %Y"
-                            ).date()
+                            birthdate = parser.parse(birthdate_str).date()
                         response_data["birthdate"] = birthdate
                     except ValueError as e:
                         logger.error(f"Error parsing birthdate: {e}")
