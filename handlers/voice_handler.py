@@ -328,10 +328,10 @@ async def handle_voice_message(
                         for parameter, value in response_data.items():
                             try:
                                 logger.info(
-                                    f"Updating {parameter} with value {value} for user {response_data['userid']}"
+                                    f"Updating {parameter} with value {value} for user {user_id}"
                                 )
                                 await database.update_entity_parameter(
-                                    entity_id=response_data["userid"],
+                                    entity_id=user_id,
                                     parameter=parameter,
                                     value=value,
                                     model_class=User,
